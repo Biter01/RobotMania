@@ -18,6 +18,7 @@ export class GameField {
   constructor() {
     this.parsed = parseMap(LEVEL_2, TILE_SIZE)
     this.playerSpawn = this.parsed.playerSpawn
+      
 
     this.meshes.push(this.buildFloor())
     this.meshes.push(this.buildWallBlocks())

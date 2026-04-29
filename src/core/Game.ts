@@ -1,9 +1,13 @@
 import * as THREE from 'three'
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js'
+import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js'
 import { InputManager } from './InputManager'
 import { Player } from '../entities/Player'
 import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
 import { Pistol } from '../weapons/Pistol'
+import { ScanlineShader } from '../shaders/ScanlineShader'
 import {
   COLOR_SKY,
   AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY,
@@ -22,6 +26,8 @@ export class Game {
   input: InputManager
   state: GameState = GameState.MENU
 
+  private composer!: EffectComposer
+  private scanlinePass!: ShaderPass
   private player!: Player
   private pistol!: Pistol
   private field!: GameField
@@ -40,6 +46,8 @@ export class Game {
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(window.innerWidth, window.innerHeight)
 
+    this.setupPostProcessing()
+
     this.fpsEl = document.getElementById('fps') as HTMLElement
 
     this.input = new InputManager(canvas, () => this.state)
@@ -53,7 +61,19 @@ export class Game {
       this.camera.aspect = window.innerWidth / window.innerHeight
       this.camera.updateProjectionMatrix()
       this.renderer.setSize(window.innerWidth, window.innerHeight)
+      this.composer.setSize(window.innerWidth, window.innerHeight)
+      // Auflösung aktualisieren damit Scanline-Dichte bei Resize korrekt bleibt
+      this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
     })
+  }
+
+  private setupPostProcessing() {
+    this.composer = new EffectComposer(this.renderer)
+    this.composer.addPass(new RenderPass(this.scene, this.camera))
+
+    this.scanlinePass = new ShaderPass(ScanlineShader)
+    this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
+    this.composer.addPass(this.scanlinePass)
   }
 
   setState(next: GameState) {
@@ -132,6 +152,6 @@ export class Game {
   }
 
   render() {
-    this.renderer.render(this.scene, this.camera)
+    this.composer.render()
   }
 }
