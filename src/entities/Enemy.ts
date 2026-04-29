@@ -27,7 +27,7 @@ export class Enemy {
     this.mesh.scale.set(1, 1, 1)
     this.mesh.position.copy(this.position)
 
-    loadPixelTexture('/sprites/enemies/RoboOrginalNew.png').then(tex => {
+    loadPixelTexture('./sprites/enemies/RobotOrginalNew.png').then(tex => {
       this.texture = tex
       mat.map = tex
       mat.needsUpdate = true
