@@ -11,7 +11,7 @@ export function loadPixelTexture(url: string): Promise<THREE.Texture> {
         tex.minFilter = THREE.NearestFilter
 
         // 🔥 WICHTIG für Pixel-Art
-        tex.generateMipmaps = false
+        tex.generateMipmaps = false 
 
         // optional, aber sauber:
         tex.colorSpace = THREE.SRGBColorSpace

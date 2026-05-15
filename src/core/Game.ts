@@ -42,7 +42,7 @@ export class Game {
 
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR)
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true })
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false })
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(window.innerWidth, window.innerHeight)
 
@@ -86,12 +86,13 @@ export class Game {
     const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     dir.position.set(5, 10, 5)
     this.scene.add(dir)
+    this.scene.add(this.camera)
 
     this.field = new GameField()
     this.field.render(this.scene)
 
     this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z, this.field.colliders)
-    this.pistol = new Pistol()
+    this.pistol = new Pistol(this.camera)
   }
 
   start() {
@@ -105,28 +106,42 @@ export class Game {
     const dt = Math.min(rawDt, FRAME_DT_CAP)
     this.lastTime = now
 
+    this.calculateFPS(rawDt)
+    this.update(dt)
+    this.render()
+    requestAnimationFrame(this.loop)
+  }
+
+  private calculateFPS(rawDt: number) {
     this.fps = this.fps * 0.9 + (1 / rawDt) * 0.1
 
     this.fps = Math.min(this.fps, FRAME_CAP)
 
     if (this.fpsEl) this.fpsEl.textContent = `FPS: ${Math.round(this.fps)}`
-    
-    this.update(dt)
-    this.render()
-    requestAnimationFrame(this.loop)
   }
 
   update(dt: number) {
     if (this.state !== GameState.PLAYING) return
 
     this.player.update(dt, this.input)
+    this.updateWeapon(dt);
+    this.updateProjectiles(dt)
+    this.updateEnemies(dt);
+  }
 
+  render() {
+    this.composer.render()
+  }
+
+  private updateWeapon(dt: number) {
     const newProjectile = this.pistol.update(dt, this.input, this.camera)
     if (newProjectile) {
       this.scene.add(newProjectile.mesh)
       this.projectiles.push(newProjectile)
     }
+  }
 
+  private updateProjectiles(dt: number) : void {
     const enemies = this.field.enemies
     for (const p of this.projectiles) {
       p.update(dt, this.field.colliders, enemies)
@@ -137,6 +152,10 @@ export class Game {
     }
     this.projectiles = this.projectiles.filter(p => p.alive)
 
+  }
+
+  private updateEnemies(dt: number) : void {
+    const enemies = this.field.enemies
     for (const enemy of enemies) {
       enemy.update(dt)
     }
@@ -149,9 +168,5 @@ export class Game {
         enemies.splice(i, 1)
       }
     }
-  }
-
-  render() {
-    this.composer.render()
   }
 }
