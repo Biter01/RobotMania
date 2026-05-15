@@ -104,8 +104,8 @@ export class Projectile {
   private age = 0
   private prev = new THREE.Vector3()
 
-  constructor(camera: THREE.Camera, damage: number) {
-    this.position = camera.position.clone()
+  constructor(camera: THREE.Camera, damage: number, spawnOffset = new THREE.Vector3()) {
+    this.position = camera.position.clone().add(spawnOffset)
     this.prev.copy(this.position)
     this.damage = damage
 

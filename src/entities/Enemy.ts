@@ -19,12 +19,12 @@ export class Enemy {
   private texture: THREE.Texture | null = null
 
   constructor(x: number, z: number) {
-    this.position = new THREE.Vector3(x, 0.5, z)
+    this.position = new THREE.Vector3(x, 0.4, z)
     this.yMin = 0
     this.yMax = 1.4
     const mat = new THREE.SpriteMaterial({ color: COLOR_ALIVE, alphaTest: 1 })
     this.mesh = new THREE.Sprite(mat)
-    this.mesh.scale.set(1, 1, 1)
+    this.mesh.scale.set(0.8, 0.8, 0.8)
     this.mesh.position.copy(this.position)
 
     loadPixelTexture('./sprites/enemies/RobotOrginalNew.png').then(tex => {

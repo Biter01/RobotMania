@@ -27,7 +27,7 @@ export const PITCH_LIMIT_DEG     = 80
 
 // Weapon
 export const PISTOL_DAMAGE       = 34
-export const PISTOL_COOLDOWN     = 0.1
+export const PISTOL_COOLDOWN     = 0.2
 
 // Projectile
 export const PROJECTILE_SPEED    = 100

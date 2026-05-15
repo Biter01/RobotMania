@@ -8,7 +8,7 @@ export const ScanlineShader = {
     resolution: { value: window.innerHeight * window.devicePixelRatio },
 
     // Stärke der Scanlines
-    intensity:  { value: 0.05 },
+    intensity:  { value: 0.03 },
 
     // 👉 NEU: Farbe der Scanlines
     scanlineColor: { value: new THREE.Color(0x9bc0eb) }
