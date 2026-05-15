@@ -47,14 +47,11 @@ export class Pistol {
     const forward = new THREE.Vector3()
     camera.getWorldDirection(forward)
 
-    // Kreuzprodukt:
     // forward × worldUp ergibt den lokalen "right"-Vektor der Kamera.
     // Das Ergebnis steht senkrecht auf beiden Vektoren
-    // (Rechte-Hand-Regel).
 
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
 
-    // Noch ein Kreuzprodukt:
     // right × forward ergibt den lokalen "up"-Vektor,
     // sodass wir ein orthogonales Kamerakoordinatensystem haben:
     // forward / right / up

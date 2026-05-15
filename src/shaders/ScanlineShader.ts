@@ -4,13 +4,11 @@ export const ScanlineShader = {
   uniforms: {
     tDiffuse:   { value: null as THREE.Texture | null },
 
-    // Physische Bildschirmhöhe in Pixeln – wird von Game.ts beim Init und Resize gesetzt
     resolution: { value: window.innerHeight * window.devicePixelRatio },
 
-    // Stärke der Scanlines
+    // Strength of the scanline effect: positive values make bright lines brighter and dark lines darker.
     intensity:  { value: 0.03 },
 
-    // 👉 NEU: Farbe der Scanlines
     scanlineColor: { value: new THREE.Color(0x9bc0eb) }
   },
 
@@ -29,7 +27,6 @@ export const ScanlineShader = {
     uniform float intensity;
     uniform vec3 scanlineColor;
   
-
     varying vec2 vUv;
 
     void main() {
