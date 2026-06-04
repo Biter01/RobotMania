@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { WallBox } from '../types'
+import { ColliderBox } from '../types'
 import { Enemy } from '../entities/Enemy'
 import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK } from '../GameConstants'
 import { LEVEL_2 } from './MapData'
@@ -8,7 +8,7 @@ import { parseMap } from './Map'
 import { ParsedMap } from '../types'
 
 export class GameField {
-  readonly colliders: WallBox[] = []
+  readonly colliders: ColliderBox[] = []
   readonly enemies: Enemy[] = []
   readonly playerSpawn: { x: number; z: number }
 

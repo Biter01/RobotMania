@@ -36,7 +36,7 @@ export class Pistol {
     this.cooldownTimer -= dt
     if (input.consumeClick() && this.cooldownTimer <= 0) {
       this.cooldownTimer = PISTOL_COOLDOWN
-      this.triggerKick()
+      this.triggerKlick()
       return new Projectile(camera, PISTOL_DAMAGE, this.barrelOffset(camera))
     }
     return null
@@ -62,7 +62,7 @@ export class Pistol {
                 .addScaledVector(up, -BARREL_OFFSET_DOWN)
   }
 
-  private triggerKick() {
+  private triggerKlick() {
 
   }
 }

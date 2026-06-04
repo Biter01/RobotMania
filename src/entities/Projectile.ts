@@ -1,12 +1,12 @@
 import * as THREE from 'three'
-import { WallBox } from '../types'
+import { ColliderBox } from '../types'
 import { Enemy } from './Enemy'
 import { PROJECTILE_SPEED, ENEMY_RADIUS } from '../GameConstants'
 
 const PROJECTILE_LIFETIME = 3.0
 const PROJECTILE_MESH_RADIUS = 0.08
 
-function segmentHitsBox(ox: number, oz: number, dx: number, dz: number, box: WallBox): boolean {
+function segmentHitsBox(ox: number, oz: number, dx: number, dz: number, box: ColliderBox): boolean {
   let tmin = 0
   let tmax = 1
   
@@ -34,7 +34,6 @@ function segmentHitsBox(ox: number, oz: number, dx: number, dz: number, box: Wal
 
   return true
 }
-
 
 function segmentHitsCircle(
   ox: number, oy: number, oz: number, // Startpunkt der Kugel
@@ -119,7 +118,7 @@ export class Projectile {
     this.mesh.position.copy(this.position)
   }
 
-  update(dt: number, walls: WallBox[], enemies: Enemy[]) {
+  update(dt: number, walls: ColliderBox[], enemies: Enemy[]) {
     this.age += dt
     if (this.age > PROJECTILE_LIFETIME) {
       this.alive = false

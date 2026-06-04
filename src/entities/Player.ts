@@ -5,7 +5,7 @@ import {
   PLAYER_SPEED, PLAYER_RADIUS, PLAYER_EYE_HEIGHT,
   MOUSE_SENSITIVITY, PITCH_LIMIT_DEG,
 } from '../GameConstants'
-import { WallBox } from '../types'
+import { ColliderBox } from '../types'
 
 const PITCH_LIMIT = (PITCH_LIMIT_DEG * Math.PI) / 180
 
@@ -17,9 +17,9 @@ export class Player {
   private yaw = 0
   private pitch = 0
   private moveDir = new THREE.Vector3()
-  private walls: WallBox[]
+  private walls: ColliderBox[]
 
-  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2, walls: WallBox[] = []) {
+  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2, walls: ColliderBox[] = []) {
     this.camera = camera
     this.position = new THREE.Vector3(spawnX, PLAYER_EYE_HEIGHT, spawnZ)
     this.yaw = Math.PI
@@ -41,7 +41,7 @@ export class Player {
     this.camera.quaternion.setFromEuler(euler)
   }
 
-  private overlapsBox(x: number, z: number, box: WallBox): boolean {
+  private overlapsBox(x: number, z: number, box: ColliderBox): boolean {
     return (
       x + PLAYER_RADIUS > box.minX &&
       x - PLAYER_RADIUS < box.maxX &&
