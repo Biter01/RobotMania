@@ -1,4 +1,4 @@
-export interface WallBox {
+export interface ColliderBox {
   minX: number
   maxX: number
   minZ: number
