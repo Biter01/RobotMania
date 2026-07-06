@@ -157,7 +157,7 @@ export class Game {
   private updateEnemies(dt: number) : void {
     const enemies = this.field.enemies
     for (const enemy of enemies) {
-      enemy.update(dt)
+      enemy.update(dt, this.camera.position)
     }
 
     for (let i = enemies.length - 1; i >= 0; i--) {
