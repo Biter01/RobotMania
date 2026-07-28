@@ -55,4 +55,8 @@ export class StateMachine<S extends number | string> {
       this.currentFrame = config.frames[this.frameIdx]
     }
   }
+
+  public getCurrentFrame():S|null {
+      return this.current
+  }
 }

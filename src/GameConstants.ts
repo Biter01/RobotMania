@@ -1,7 +1,9 @@
+import { LEVEL_1, LEVEL_2 } from "./world/MapData"
+
 // World / playfield
-export const TILE_SIZE           = 1
-export const WALL_HEIGHT         = 2
-export const BLOCK_HALF_SIZE     = 0.5
+export const TILE_SIZE           = 2
+export const WALL_HEIGHT         = 3
+export const BLOCK_HALF_SIZE     = 0.5*TILE_SIZE
 
 // Lighting
 export const AMBIENT_INTENSITY   = 0.4
@@ -30,8 +32,11 @@ export const PISTOL_DAMAGE       = 34
 export const PISTOL_COOLDOWN     = 0.2
 
 // Projectile
-export const PROJECTILE_SPEED    = 100
+export const PROJECTILE_SPEED    = 200
 
 // Enemy
 export const ENEMY_HP            = 100
 export const ENEMY_RADIUS        = 0.3
+
+//Levels
+export const CURRENT_LEVEL = LEVEL_2

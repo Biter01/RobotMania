@@ -2,24 +2,31 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ColliderBox } from '../types'
 import { Enemy } from '../entities/Enemy'
-import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK } from '../GameConstants'
-import { LEVEL_2 } from './MapData'
+import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK, CURRENT_LEVEL } from '../GameConstants'
 import { parseMap } from './Map'
 import { ParsedMap } from '../types'
 
+//Singleton class that represents the game field, including walls, floor, and enemies
 export class GameField {
   readonly colliders: ColliderBox[] = []
   readonly enemies: Enemy[] = []
   readonly playerSpawn: { x: number; z: number }
 
+  readonly tileMap: string[]
+
   private meshes: THREE.Mesh[] = []
   private parsed: ParsedMap
+  private walkableSet: Set<string>
 
-  constructor() {
-    this.parsed = parseMap(LEVEL_2, TILE_SIZE)
+  private static instance: GameField | null = null
+
+
+  private constructor() {
+    this.parsed = parseMap(CURRENT_LEVEL, TILE_SIZE)
     this.playerSpawn = this.parsed.playerSpawn
-      
+    this.walkableSet = new Set(this.parsed.walkableTiles.map(t => `${t.x},${t.z}`))
 
+    this.tileMap = CURRENT_LEVEL
     this.meshes.push(this.buildFloor())
     this.meshes.push(this.buildWallBlocks())
     this.buildEnemies()
@@ -27,6 +34,13 @@ export class GameField {
     for (const mesh of this.meshes) {
       mesh.matrixAutoUpdate = false
     }
+  }
+
+  static getInstance(): GameField {
+    if (!GameField.instance) {
+      GameField.instance = new GameField()
+    }
+    return GameField.instance
   }
 
   render(scene: THREE.Scene) {
@@ -69,5 +83,9 @@ export class GameField {
     for (const { x, z } of this.parsed.enemySpawns) {
       this.enemies.push(new Enemy(x, z))
     }
+  }
+
+  public isTileWalkable(x: number, z: number): boolean {
+    return this.walkableSet.has(`${x},${z}`)
   }
 }

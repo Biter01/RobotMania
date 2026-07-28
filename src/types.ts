@@ -11,6 +11,7 @@ export interface ParsedMap {
   enemySpawns: Array<{ x: number; z: number }>
   rows: number
   cols: number
+  walkableTiles: Array<{ x: number; z: number }>
 }
 
 export enum GameState {
