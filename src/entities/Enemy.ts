@@ -118,7 +118,7 @@ export class Enemy {
   }
 
   private updateDirection(viewerPos: THREE.Vector3): void {
-    const { sector, mirror } = this.viewSector(viewerPos)
+    const { sector } = this.viewSector(viewerPos)
 
     let nextState: EnemyState
     switch (this.activity) {

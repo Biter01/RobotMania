@@ -1,4 +1,4 @@
-import { LEVEL_1, LEVEL_2 } from "./world/MapData"
+import { LEVEL_2 } from "./world/MapData"
 
 // World / playfield
 export const TILE_SIZE           = 2
