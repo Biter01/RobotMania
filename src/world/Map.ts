@@ -4,7 +4,7 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
   const walls: ParsedMap['walls'] = []
   const enemySpawns: ParsedMap['enemySpawns'] = []
   let playerSpawn: ParsedMap['playerSpawn'] = { x: tileSize / 2, z: tileSize / 2 }
-
+  const walkableTiles: ParsedMap['walkableTiles'] = []
   const rows = mapData.length
   const cols = mapData[0]?.length ?? 0
 
@@ -15,13 +15,16 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
       const z = row * tileSize + tileSize / 2
       if (ch === '#') {
         walls.push({ x, z })
-      } else if (ch === 'P') {
-        playerSpawn = { x, z }
       } else if (ch === 'E') {
         enemySpawns.push({ x, z })
+      } else {
+        walkableTiles.push({ x: col, z: row })
+        if (ch === 'P') {
+          playerSpawn = { x, z }
+        } 
       }
     }
   }
 
-  return { walls, playerSpawn, enemySpawns, rows, cols }
+  return { walls, playerSpawn, enemySpawns, rows, cols, walkableTiles }
 }

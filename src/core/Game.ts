@@ -38,6 +38,9 @@ export class Game {
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene()
+
+    
+
     this.scene.background = new THREE.Color(COLOR_SKY)
 
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR)
@@ -62,11 +65,15 @@ export class Game {
       this.camera.updateProjectionMatrix()
       this.renderer.setSize(window.innerWidth, window.innerHeight)
       this.composer.setSize(window.innerWidth, window.innerHeight)
-      // Auflösung aktualisieren damit Scanline-Dichte bei Resize korrekt bleibt
+      // Update resolution so that Scanline-density uniform is correct for new window size
       this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
     })
   }
 
+  /*
+    This class represents a render pass. 
+    It takes a camera and a scene and produces a beauty pass for subsequent post processing effects.
+  */
   private setupPostProcessing() {
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
@@ -82,13 +89,15 @@ export class Game {
   }
 
   init() {
+
+
     this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
     const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     dir.position.set(5, 10, 5)
     this.scene.add(dir)
     this.scene.add(this.camera)
 
-    this.field = new GameField()
+    this.field = GameField.getInstance()
     this.field.render(this.scene)
 
     this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z, this.field.colliders)
@@ -124,6 +133,9 @@ export class Game {
     if (this.state !== GameState.PLAYING) return
 
     this.player.update(dt, this.input)
+    console.log(this.player.position.x, this.player.position.y, this.player.position.z)
+
+
     this.updateWeapon(dt);
     this.updateProjectiles(dt)
     this.updateEnemies(dt);

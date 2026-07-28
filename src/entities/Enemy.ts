@@ -1,7 +1,9 @@
 import * as THREE from 'three'
 import { ENEMY_HP } from '../GameConstants'
 import { loadPixelTexture } from '../core/AssetLoader'
-import { StateMachine } from '../sprites/StateMachine'
+import { StateMachine } from '../states/StateMachine'
+import {EnemyState} from '../states/EnemyState'
+import { EnemyAI } from './enemyAI/EnemyAI'
 
 const COLOR_ALIVE    = 0xffffff
 const COLOR_DEAD     = 0x555555
@@ -12,29 +14,6 @@ const FLASH_DURATION = 0.12
 
 const TOTAL_FRAMES = 102
 
-export enum EnemyState {
-  IdleFront,
-  IdleLeft,
-  IdleRight,
-  Idle34FrontLeft,
-  Idle34FrontRight,
-  Idle34BackLeft,
-  Idle34BackRight,
-  IdleBack,
-  WalkFront,
-  WalkLeft,
-  WalkRight,
-  Walk34FrontLeft,
-  Walk34FrontRight,
-  Walk34BackLeft,
-  Walk34BackRight,
-  WalkBack,
-  ShootingFront,
-  Shooting34FrontLeft,
-  Shooting34FrontRight,
-  Dead,
-}
-
 export class Enemy {
   mesh: THREE.Sprite
   position: THREE.Vector3
@@ -44,14 +23,18 @@ export class Enemy {
   alive = true
   flashTimer = 0
 
-  facing = new THREE.Vector3(0, 0, -1)
+  public facing: THREE.Vector3 = new THREE.Vector3(0, 0, -1)
+  
+  private enemyAI: EnemyAI;
+
 
   //Test value
   private activity: 'idle' | 'walk' | 'shoot' | 'dead' = 'idle'
   private static readonly _toViewer = new THREE.Vector3()
 
   private texture: THREE.Texture | null = null
-  private sm: StateMachine<EnemyState> | null = null
+  public sm: StateMachine<EnemyState> | null = null
+  
 
   constructor(x: number, z: number) {
     this.position = new THREE.Vector3(x, 0.4, z)
@@ -61,6 +44,7 @@ export class Enemy {
     this.mesh = new THREE.Sprite(mat)
     this.mesh.scale.set(0.8, 0.8, 0.8)
     this.mesh.position.copy(this.position)
+    this.enemyAI = new EnemyAI(this);
 
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
       this.texture = tex
@@ -97,6 +81,11 @@ export class Enemy {
     })
   }
 
+  public setActivity(activity: 'idle' | 'walk' | 'shoot'): void {
+    if (!this.alive) return
+    this.activity = activity
+  }
+
   private get mat(): THREE.SpriteMaterial {
     return this.mesh.material as THREE.SpriteMaterial
   }
@@ -112,8 +101,14 @@ export class Enemy {
     toViewer.normalize()
     const fx = this.facing.x
     const fz = this.facing.z
+    //Two normalized vectors: facing and toViewer
+
+    //cos(o) for x
     const dot   = fx * toViewer.x + fz * toViewer.z
-    const cross = fx * toViewer.z - fz * toViewer.x   // >0 = player to LEFT of facing
+
+    //sin(o) for y
+    const cross = fx * toViewer.z - fz * toViewer.x 
+    //Plot point and atan2 computes the angle in radians
     const angle = Math.atan2(-cross, dot)
     let a = angle < 0 ? angle + Math.PI * 2 : angle
     return {
@@ -123,12 +118,11 @@ export class Enemy {
   }
 
   private updateDirection(viewerPos: THREE.Vector3): void {
-    const { sector, mirror } = this.viewSector(viewerPos)
-
+    const { sector } = this.viewSector(viewerPos)
 
     let nextState: EnemyState
     switch (this.activity) {
-      case 'idle': {
+      case 'idle': 
         const IDLE: EnemyState[] = [EnemyState.IdleFront, EnemyState.Idle34FrontLeft,EnemyState.IdleLeft ,EnemyState.Idle34BackLeft,EnemyState.IdleBack ,EnemyState.Idle34BackRight,EnemyState.IdleRight ,EnemyState.Idle34FrontRight]
         
         nextState = IDLE[sector]
@@ -143,29 +137,31 @@ export class Enemy {
         }
 
         break
-      }
-      case 'walk': {
+      
+      case 'walk': 
         const WALK: EnemyState[] = [EnemyState.WalkFront, EnemyState.Walk34FrontLeft,EnemyState.WalkLeft ,EnemyState.Walk34BackLeft,EnemyState.WalkBack ,EnemyState.Walk34BackRight,EnemyState.WalkRight ,EnemyState.Walk34FrontRight]
         
       
-          nextState = WALK[sector]
+        nextState = WALK[sector]
 
-          // case 3 and 5 must be switched to look correct
-          if(sector === 3) {
-            nextState = WALK[sector+2]
-          }
+        // case 3 and 5 must be switched to look correct
+        if(sector === 3) {
+          nextState = WALK[sector+2]
+        }
 
-          if(sector === 5) {
-              nextState = WALK[sector-2]
-          } 
+        if(sector === 5) {
+            nextState = WALK[sector-2]
+        } 
         break
-      }
+      
       case 'shoot':
-        if(mirror) {
+        /*if(mirror) {
           nextState = EnemyState.Shooting34FrontLeft
         } else {
           nextState = EnemyState.Shooting34FrontRight
-        }
+        }*/
+
+        nextState = EnemyState.ShootingFront;
 
         break
       case 'dead':
@@ -177,12 +173,25 @@ export class Enemy {
     
   }
 
-  update(dt: number, viewerPos?: THREE.Vector3): void {
+
+  private updateEnemyState(dt: number, playerPos: THREE.Vector3): void {
     if (this.sm) {
-      if (this.alive && viewerPos) this.updateDirection(viewerPos)
-      this.sm.update(dt)
-      this.applyFrame(this.sm.currentFrame)
+      if (this.alive && playerPos) {
+          this.updateDirection(playerPos)
+        }
+
+        this.sm.update(dt)
+        this.applyFrame(this.sm.currentFrame)
     }
+  }
+
+
+  public update(dt: number, playerPos: THREE.Vector3): void {
+
+    this.enemyAI.update(dt, playerPos);
+    this.updateEnemyState(dt, playerPos)
+    this.mesh.position.copy(this.position)
+
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt
@@ -192,7 +201,8 @@ export class Enemy {
     }
   }
 
-  takeDamage(amount: number): void {
+  
+  public takeDamage(amount: number): void {
     this.hp -= amount
     if (this.hp <= 0) {
       this.alive = false
