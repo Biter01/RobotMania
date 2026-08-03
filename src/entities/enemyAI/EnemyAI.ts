@@ -1,7 +1,8 @@
-import { TILE_SIZE } from '../../GameConstants';
+import { TILE_SIZE, ENEMY_RADIUS } from '../../GameConstants';
 import { Enemy } from '../Enemy'
 import * as THREE from 'three'
 import { AstarPathfinding } from './AstarPathfinding';
+import { GameField } from '../../world/GameField';
 
 export class EnemyAI {
     
@@ -17,6 +18,11 @@ export class EnemyAI {
     // zufälliger Versatz -> die Gegner rechnen NICHT alle im selben Frame neu
     private replanTimer = Math.random() * this.replanInterval;
 
+    private readonly wanderTime = 0.6; // Sekunden zwischen Wanderbewegungen
+    private wanderTimer = this.wanderTime; 
+    private isWandering = false;
+    private wanderRight:boolean = false; // Zufällige Richtung für das Wandern
+
     constructor(enemy: Enemy) {
         this.enemy = enemy;
     }
@@ -27,8 +33,20 @@ export class EnemyAI {
         const inAttackRange = this.isPlayerInAttackRange(this.enemy.position, playerPos);
         const inSight = this.isPlayerInSight(this.enemy.position, playerPos);
 
+        const randomSeed = Math.random()
+
+
         if (inAttackRange) {
-            this.enemy.setActivity('shoot');
+
+             if((randomSeed > 0.99 || this.isWandering)) {
+                this.wanderSide(playerPos,dt)
+            }
+            
+            if(this.isWandering) {
+                this.enemy.setActivity('walk');
+            } else {
+                this.enemy.setActivity('shoot');
+            }
             //this.enemy.attackPlayer(this.enemy, playerPos);
         } else if (inSight) {
             this.enemy.setActivity('walk');
@@ -36,15 +54,82 @@ export class EnemyAI {
         } else {
             this.enemy.setActivity('idle');
         }
+
+        this.resolveSeparation();
     }
+
+    private resolveSeparation(): void {
+        const minDist = ENEMY_RADIUS;
+
+        for (const other of GameField.getInstance().enemies) {
+            if (other === this.enemy || !other.alive) continue;
+
+            const dx = this.enemy.position.x - other.position.x;
+            const dz = this.enemy.position.z - other.position.z;
+            const distSq = dx * dx + dz * dz;
+
+            if (distSq >= minDist * minDist) continue;
+
+            const dist = Math.sqrt(distSq);
+            
+            // dx dz is always pointing from other to this.enemy, so we can use it to move this.enemy away from other
+
+            // Enemies stay exactly on the same tile, go abitrary direction to separate
+
+            const nx = dist > 0.0001 ? dx / dist : 1;
+            const nz = dist > 0.0001 ? dz / dist : 0;
+            const overlap = minDist - dist;
+
+            // nur die eigene Position korrigieren (der andere Gegner löst sich in seinem eigenen Update)
+            this.enemy.position.x += nx * overlap * 0.5;
+            this.enemy.position.z += nz * overlap * 0.5;
+        }
+    }
+    
 
      private stepTowardsPlayer(dt: number, playerPos: THREE.Vector3): void {
         this.replanTimer -= dt;
         if (this.replanTimer <= 0 || this.path.length === 0) {
-            this.recomputePath(playerPos);          // <-- HIER läuft A*, nur selten
+            this.recomputePath(playerPos);          
             this.replanTimer = this.replanInterval;
         }
-        this.followPath(dt);                        // <-- jeden Frame, aber gratis
+        //Just follow
+        this.followPath(dt);              
+    }
+
+
+     private wanderSide(playerPos: THREE.Vector3,dt: number) {
+        if(this.wanderTimer == this.wanderTime) {
+            this.wanderRight = Math.random() > 0.5; // Zufällige Richtung für das Wandern
+        }
+        
+        if(this.wanderTimer > 0) {
+            this.wanderTimer -= dt;
+            this.isWandering = true;
+        } else {
+            this.isWandering = false;
+            this.wanderTimer = this.wanderTime; // Reset the timer for the next wander
+        }
+
+        const toTarget = new THREE.Vector3().subVectors(playerPos, this.enemy.position).normalize();
+        const up = new THREE.Vector3(0, 1, 0);
+
+        // Senkrecht nach rechts (aus Sicht des Gegners, der Richtung toTarget schaut)
+        const right = new THREE.Vector3().crossVectors(toTarget, up).normalize();
+
+        // Senkrecht nach links = einfach das Gegenteil
+        const left = right.clone().negate();
+
+        if(this.wanderRight) {
+            this.enemy.facing = right;
+
+            this.enemy.position.add(right.multiplyScalar(this.speed * dt));
+        } else {
+            this.enemy.facing = left;
+
+
+            this.enemy.position.add(left.multiplyScalar(this.speed * dt));
+        }
     }
 
     private recomputePath(playerPos: THREE.Vector3): void {

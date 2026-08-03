@@ -13,3 +13,12 @@ menuOverlay.addEventListener('click', () => {
   game.setState(GameState.PLAYING)
   game.start()
 }, { once: true })
+
+document.addEventListener('keydown', (keyboardEvent: KeyboardEvent) => {
+  
+  if (keyboardEvent.key === 'Tab') {
+      keyboardEvent.preventDefault(); // wichtig, siehe unten
+      game.toggleEnemyFacingDebug();
+      // z. B. game.toggleSomething();
+  }
+})

@@ -15,13 +15,13 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
       const z = row * tileSize + tileSize / 2
       if (ch === '#') {
         walls.push({ x, z })
-      } else if (ch === 'E') {
-        enemySpawns.push({ x, z })
       } else {
         walkableTiles.push({ x: col, z: row })
         if (ch === 'P') {
           playerSpawn = { x, z }
-        } 
+        } else if (ch === 'E') {
+          enemySpawns.push({ x, z })
+        }
       }
     }
   }

@@ -8,6 +8,7 @@ import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
 import { Pistol } from '../weapons/Pistol'
 import { ScanlineShader } from '../shaders/ScanlineShader'
+import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
 import {
   COLOR_SKY,
   AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY,
@@ -31,15 +32,17 @@ export class Game {
   private player!: Player
   private pistol!: Pistol
   private field!: GameField
+  private enemyFacingDebug?: EnemyFacingDebug
   private projectiles: Projectile[] = []
   private lastTime = 0
   private fps = 0
   private fpsEl: HTMLElement
+  private debugShowEnemyFacing = false
+
+
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene()
-
-    
 
     this.scene.background = new THREE.Color(COLOR_SKY)
 
@@ -89,8 +92,6 @@ export class Game {
   }
 
   init() {
-
-
     this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
     const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     dir.position.set(5, 10, 5)
@@ -102,6 +103,8 @@ export class Game {
 
     this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z, this.field.colliders)
     this.pistol = new Pistol(this.camera)
+
+    
   }
 
   start() {
@@ -180,5 +183,24 @@ export class Game {
         enemies.splice(i, 1)
       }
     }
+
+    this.enemyFacingDebug?.update(enemies)
+  }
+
+  public toggleEnemyFacingDebug() {
+    
+   
+    this.debugShowEnemyFacing = !this.debugShowEnemyFacing
+    
+
+    if( this.debugShowEnemyFacing) {
+      this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
+    } else {
+      this.enemyFacingDebug?.dispose()
+      this.enemyFacingDebug = undefined
+    }
+
+    document.getElementById('debug')!.textContent = this.debugShowEnemyFacing ? 'DEBUG: ENEMY FACING ON' : ''
   }
 }
+
