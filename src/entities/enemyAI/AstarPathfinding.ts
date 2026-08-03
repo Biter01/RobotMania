@@ -25,7 +25,7 @@ class AstarNode {
 
     private calculateHeuristic(nowPos: THREE.Vector2, goalPos: THREE.Vector2): number {
         // Implement heuristic calculation (e.g., Manhattan distance) to the goal
-        return Math.abs(nowPos.x - goalPos.x) + Math.abs(nowPos.y - goalPos.y);
+        return Math.sqrt(Math.pow(nowPos.x - goalPos.x, 2) + Math.pow(nowPos.y - goalPos.y, 2));
     }
 }
 
@@ -101,7 +101,11 @@ export class AstarPathfinding {
             new THREE.Vector2(1, 0),  // Right
             new THREE.Vector2(-1, 0), // Left
             new THREE.Vector2(0, 1),  // Up
-            new THREE.Vector2(0, -1)  // Down
+            new THREE.Vector2(0, -1),  // Down
+            new THREE.Vector2(1, 1),  // Up-Right
+            new THREE.Vector2(-1, 1), // Up-Left
+            new THREE.Vector2(1, -1), // Down-Right
+            new THREE.Vector2(-1, -1) // Down-Left
         ];
         for(const dir of directions) {
             const neighborPos = node.nowPos.clone().add(dir);
@@ -129,9 +133,17 @@ export class AstarPathfinding {
     private isValidTile(tilePos: THREE.Vector2): boolean {
         // Implement logic to check if the tile is walkable (not a wall or obstacle)
         // For now, let's assume all tiles are valid
+        
+        for(const enemy of GameField.getInstance().enemies) {
+            const enemyTile = this.toTileCoordinates(new THREE.Vector2(enemy.position.x, enemy.position.z));
+            if(enemyTile.equals(tilePos)) {
+                return false; // Tile is occupied by another enemy
+            }
+        }
+        
         return GameField.getInstance().isTileWalkable(tilePos.x, tilePos.y);
-    }
 
+    }
 
 
     private addToHeap(node: AstarNode): void {

@@ -78,6 +78,15 @@
         animation: blink 1s step-end infinite;
       }
 
+     #debug {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        font-size: 0.85rem;
+        color: #fff;
+        text-shadow: 1px 1px 2px #000;
+      }
+
       @keyframes blink {
         50% { opacity: 0; }
       }
@@ -87,6 +96,7 @@
     <canvas id="game-canvas"></canvas>
     <div id="hud">
       <span id="fps"></span>
+      <span id="debug"></span>
     </div>
     <div id="menu-overlay">
       <h1>ROBOT MANIA</h1>
