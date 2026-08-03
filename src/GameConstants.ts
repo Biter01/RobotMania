@@ -40,5 +40,3 @@ export const ENEMY_RADIUS        = 0.3
 
 //Levels
 export const CURRENT_LEVEL = LEVEL_2
-
-

@@ -92,6 +92,8 @@ export class Game {
   }
 
   init() {
+
+
     this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
     const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     dir.position.set(5, 10, 5)
