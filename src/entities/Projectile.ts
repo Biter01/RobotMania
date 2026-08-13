@@ -1,7 +1,7 @@
 import * as THREE from 'three'
-import { ColliderBox } from '../types'
-import { Enemy } from './Enemy'
+import { ColliderBox, UpdateContext } from '../types'
 import { PROJECTILE_SPEED, ENEMY_RADIUS } from '../GameConstants'
+import { Entity } from './Entity'
 
 const PROJECTILE_LIFETIME = 3.0
 const PROJECTILE_MESH_RADIUS = 0.08
@@ -94,7 +94,7 @@ function segmentHitsCircle(
   return nearY >= yMin && nearY <= yMax
 }
 
-export class Projectile {
+export class Projectile implements Entity {
   mesh: THREE.Mesh
   position: THREE.Vector3
   velocity: THREE.Vector3
@@ -118,7 +118,7 @@ export class Projectile {
     this.mesh.position.copy(this.position)
   }
 
-  update(dt: number, walls: ColliderBox[], enemies: Enemy[]) {
+  update(dt: number, ctx: UpdateContext) {
     this.age += dt
     if (this.age > PROJECTILE_LIFETIME) {
       this.alive = false
@@ -136,15 +136,15 @@ export class Projectile {
     const dy = this.position.y - oy
     const dz = this.position.z - oz
 
-    for (const box of walls) {
+    for (const box of ctx.colliders) {
       if (segmentHitsBox(ox, oz, dx, dz, box)) {
         this.alive = false
         return
       }
     }
 
-    for (const enemy of enemies) {
-      if (!enemy.alive) continue
+    for (const enemy of ctx.enemies) {
+      if (!enemy.isAlive) continue
       if (segmentHitsCircle(ox, oy, oz, dx, dy, dz, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)) {
         enemy.takeDamage(this.damage)
         this.alive = false

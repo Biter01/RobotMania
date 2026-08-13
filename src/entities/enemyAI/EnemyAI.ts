@@ -23,6 +23,12 @@ export class EnemyAI {
     private isWandering = false;
     private wanderRight:boolean = false; // Zufällige Richtung für das Wandern
 
+    private static readonly _toTarget3 = new THREE.Vector3();
+    private static readonly _target3   = new THREE.Vector3();
+    private static readonly _right     = new THREE.Vector3();
+    private static readonly _up        = new THREE.Vector3(0, 1, 0);
+
+
     constructor(enemy: Enemy) {
         this.enemy = enemy;
     }
@@ -35,7 +41,6 @@ export class EnemyAI {
 
         const randomSeed = Math.random()
 
-
         if (inAttackRange) {
 
              if((randomSeed > 0.99 || this.isWandering)) {
@@ -47,6 +52,7 @@ export class EnemyAI {
             } else {
                 this.enemy.setActivity('shoot');
             }
+
             //this.enemy.attackPlayer(this.enemy, playerPos);
         } else if (inSight) {
             this.enemy.setActivity('walk');
@@ -62,7 +68,7 @@ export class EnemyAI {
         const minDist = ENEMY_RADIUS;
 
         for (const other of GameField.getInstance().enemies) {
-            if (other === this.enemy || !other.alive) continue;
+            if (other === this.enemy || !other.isAlive()) continue;
 
             const dx = this.enemy.position.x - other.position.x;
             const dz = this.enemy.position.z - other.position.z;
@@ -80,7 +86,7 @@ export class EnemyAI {
             const nz = dist > 0.0001 ? dz / dist : 0;
             const overlap = minDist - dist;
 
-            // nur die eigene Position korrigieren (der andere Gegner löst sich in seinem eigenen Update)
+            // only change own position the other enemy seperate on its own
             this.enemy.position.x += nx * overlap * 0.5;
             this.enemy.position.z += nz * overlap * 0.5;
         }
@@ -111,24 +117,15 @@ export class EnemyAI {
             this.wanderTimer = this.wanderTime; // Reset the timer for the next wander
         }
 
-        const toTarget = new THREE.Vector3().subVectors(playerPos, this.enemy.position).normalize();
-        const up = new THREE.Vector3(0, 1, 0);
+        const toTarget = EnemyAI._toTarget3.subVectors(playerPos, this.enemy.position).normalize();
+        const right = EnemyAI._right.crossVectors(toTarget, EnemyAI._up).normalize();
 
-        // Senkrecht nach rechts (aus Sicht des Gegners, der Richtung toTarget schaut)
-        const right = new THREE.Vector3().crossVectors(toTarget, up).normalize();
-
-        // Senkrecht nach links = einfach das Gegenteil
-        const left = right.clone().negate();
-
-        if(this.wanderRight) {
-            this.enemy.facing = right;
-
-            this.enemy.position.add(right.multiplyScalar(this.speed * dt));
+        if (this.wanderRight) {
+            this.enemy.facing = right.clone(); // clone, da facing sonst denselben Scratch-Vektor referenziert
+            this.enemy.position.addScaledVector(right, this.speed * dt);
         } else {
-            this.enemy.facing = left;
-
-
-            this.enemy.position.add(left.multiplyScalar(this.speed * dt));
+            this.enemy.facing = right.clone().negate();
+            this.enemy.position.addScaledVector(right, -this.speed * dt);
         }
     }
 
@@ -160,29 +157,26 @@ export class EnemyAI {
         return distance < this.attackRange;
     }
 
-
     private moveTowards(targetPos: THREE.Vector2, step: number): void {
-        const target = new THREE.Vector3(
+        const target = EnemyAI._target3.set(
             targetPos.x * TILE_SIZE + TILE_SIZE / 2,
-            this.enemy.position.y,                       // y beibehalten, nicht auf 0 setzen!
+            this.enemy.position.y,
             targetPos.y * TILE_SIZE + TILE_SIZE / 2
         );
 
-        const toTarget = new THREE.Vector3().subVectors(target, this.enemy.position);
+        const toTarget = EnemyAI._toTarget3.subVectors(target, this.enemy.position);
         const dist = toTarget.length();
 
         if (dist > 0) {
-            this.enemy.facing = toTarget.clone().normalize();
+            this.enemy.facing = toTarget.clone().normalize(); // clone hier nötig, da facing eine eigene Referenz braucht
         }
 
         if (dist <= step) {
-            this.enemy.position.copy(target);            // exakt aufs Feld, kein Überschießen
+            this.enemy.position.copy(target);
         } else {
             this.enemy.position.add(toTarget.normalize().multiplyScalar(step));
         }
-
     }
-
     private tileIsReached(enemyPos: THREE.Vector3, nextTile: THREE.Vector2): boolean {
         const tileCenter = new THREE.Vector3(nextTile.x * TILE_SIZE + TILE_SIZE / 2, enemyPos.y, nextTile.y * TILE_SIZE + TILE_SIZE / 2);
         const distance = enemyPos.distanceTo(tileCenter);

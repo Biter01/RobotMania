@@ -31,6 +31,18 @@ class AstarNode {
 
 export class AstarPathfinding {
     
+    private static readonly directions: THREE.Vector2[] = [
+            new THREE.Vector2(1, 0),  // Right
+            new THREE.Vector2(-1, 0), // Left
+            new THREE.Vector2(0, 1),  // Up
+            new THREE.Vector2(0, -1),  // Down  
+            new THREE.Vector2(1, 1),  // Up-Right
+            new THREE.Vector2(-1, 1), // Up-Left
+            new THREE.Vector2(1, -1), // Down-Right
+            new THREE.Vector2(-1, -1) // Down-Left
+        ];
+
+
     private heap: AstarNode[] = [];
 
     public findPath(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2[] {
@@ -67,9 +79,9 @@ export class AstarPathfinding {
 
         while (this.heap.length > 0) {
             const current = this.pickBestNode();          
-            const key = `${current.nowPos.x},${current.nowPos.y}`;
+            const currKey = `${current.nowPos.x},${current.nowPos.y}`;
 
-            if (visitedNodes.has(key)) { 
+            if (visitedNodes.has(currKey)) { 
                 continue
             }
 
@@ -77,7 +89,7 @@ export class AstarPathfinding {
                 return this.reconstructPath(current);
             }
             
-            visitedNodes.add(key);
+            visitedNodes.add(currKey);
 
             for (const neighbor of this.exploreNeighbors(current)) {
                 const nKey = `${neighbor.nowPos.x},${neighbor.nowPos.y}`;
@@ -97,21 +109,24 @@ export class AstarPathfinding {
 
     private exploreNeighbors(node: AstarNode): AstarNode[] {
         const neighbors: AstarNode[] = [];
-        const directions = [
-            new THREE.Vector2(1, 0),  // Right
-            new THREE.Vector2(-1, 0), // Left
-            new THREE.Vector2(0, 1),  // Up
-            new THREE.Vector2(0, -1),  // Down
-            new THREE.Vector2(1, 1),  // Up-Right
-            new THREE.Vector2(-1, 1), // Up-Left
-            new THREE.Vector2(1, -1), // Down-Right
-            new THREE.Vector2(-1, -1) // Down-Left
-        ];
-        for(const dir of directions) {
+
+        for(const dir of AstarPathfinding.directions) {
             const neighborPos = node.nowPos.clone().add(dir);
 
             if(this.isValidTile(neighborPos)) {
-                neighbors.push(new AstarNode(neighborPos, node.goalPos, node, 1));
+
+                if(dir.x != 0 && dir.y != 0) {
+                    const sideA = node.nowPos.clone().add(new THREE.Vector2(dir.x, 0));
+                    const sideB = node.nowPos.clone().add(new THREE.Vector2(0, dir.y));
+                    // if one side is no valid tile don't allow diagonal movement
+                    if (!this.isValidTile(sideA) || !this.isValidTile(sideB)) { 
+                        continue;
+                    }
+                    neighbors.push(new AstarNode(neighborPos, node.goalPos, node, Math.sqrt(2))); // Diagonal movement cost
+   
+                } else {
+                    neighbors.push(new AstarNode(neighborPos, node.goalPos, node, 1));
+                }
             }
 
         }
@@ -133,13 +148,6 @@ export class AstarPathfinding {
     private isValidTile(tilePos: THREE.Vector2): boolean {
         // Implement logic to check if the tile is walkable (not a wall or obstacle)
         // For now, let's assume all tiles are valid
-        
-        for(const enemy of GameField.getInstance().enemies) {
-            const enemyTile = this.toTileCoordinates(new THREE.Vector2(enemy.position.x, enemy.position.z));
-            if(enemyTile.equals(tilePos)) {
-                return false; // Tile is occupied by another enemy
-            }
-        }
         
         return GameField.getInstance().isTileWalkable(tilePos.x, tilePos.y);
 
@@ -177,6 +185,4 @@ export class AstarPathfinding {
         }
         return top;
     }
-
-    
 }
