@@ -4,8 +4,6 @@ import { PISTOL_DAMAGE, PISTOL_COOLDOWN, PROJECTILE_SPEED } from '../GameConstan
 import { Weapon } from './Weapon'
 import { UpdateContext } from '../types'
 
-
-
 const BARREL_OFFSET_RIGHT = 0;
 const BARREL_OFFSET_DOWN  = 0.3;
 
@@ -56,7 +54,5 @@ export class Pistol extends Weapon {
     return right.multiplyScalar(BARREL_OFFSET_RIGHT)
                 .addScaledVector(up, -BARREL_OFFSET_DOWN)
   }
-
-  
 }
 

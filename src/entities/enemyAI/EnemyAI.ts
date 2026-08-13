@@ -11,24 +11,21 @@ export class EnemyAI {
     readonly sightRange = 50;
     readonly attackRange = 8;
     readonly speed = 3;
-    readonly replanInterval = 0.5;   // Sekunden zwischen A*-Läufen (siehe Hinweis unten)
-
-    private readonly pathFinder = new AstarPathfinding();   // EINMAL anlegen, nicht pro Aufruf
+    readonly replanInterval = 1;   
+    private readonly pathFinder = new AstarPathfinding();   
     private path: THREE.Vector2[] = [];
     private pathIndex = 0;
-    // zufälliger Versatz -> die Gegner rechnen NICHT alle im selben Frame neu
     private replanTimer = Math.random() * this.replanInterval;
 
-    private readonly wanderTime = 0.6; // Sekunden zwischen Wanderbewegungen
+    private readonly wanderTime = 0.6; 
     private wanderTimer = this.wanderTime; 
     private isWandering = false;
-    private wanderRight:boolean = false; // Zufällige Richtung für das Wandern
+    private wanderRight:boolean = false; 
 
     private static readonly _toTarget3 = new THREE.Vector3();
     private static readonly _target3   = new THREE.Vector3();
     private static readonly _right     = new THREE.Vector3();
     private static readonly _up        = new THREE.Vector3(0, 1, 0);
-
 
     constructor(enemy: Enemy) {
         this.enemy = enemy;
