@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { Projectile } from '../entities/Projectile'
-import { PISTOL_DAMAGE, PISTOL_COOLDOWN } from '../GameConstants'
+import { PISTOL_DAMAGE, PISTOL_COOLDOWN, PROJECTILE_SPEED } from '../GameConstants'
 import { Weapon } from './Weapon'
 import { UpdateContext } from '../types'
 
@@ -19,8 +19,20 @@ export class Pistol extends Weapon {
     if (ctx.input.consumeClick() && this.cooldownTimer <= 0) {
       this.cooldownTimer = this.cooldown
       
-     ctx.spawnProjectile(new Projectile(ctx.camera, PISTOL_DAMAGE, this.barrelOffset(ctx.camera)))
+      const shootDir = new THREE.Vector3()
+      ctx.camera.getWorldDirection(shootDir)
 
+      const projectile = new Projectile({
+              size: new THREE.Vector2(6, 6),
+              spawnPosition:  ctx.camera.position,
+              damage: PISTOL_DAMAGE,
+              spawnOffset: this.barrelOffset(ctx.camera),
+              shootDir: shootDir,
+              speed: PROJECTILE_SPEED,
+              projectileColor: 0xFFFFFF,
+            })
+
+      ctx.spawnProjectile(projectile)
     }   
   }
 
@@ -42,7 +54,5 @@ export class Pistol extends Weapon {
     return right.multiplyScalar(BARREL_OFFSET_RIGHT)
                 .addScaledVector(up, -BARREL_OFFSET_DOWN)
   }
-
-  
 }
 
