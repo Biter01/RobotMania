@@ -5,11 +5,14 @@ import {
   PLAYER_SPEED, PLAYER_RADIUS, PLAYER_EYE_HEIGHT,
   MOUSE_SENSITIVITY, PITCH_LIMIT_DEG,
 } from '../GameConstants'
-import { ColliderBox } from '../types'
+import { Entity } from './Entity'  
+import { Weapon } from '../weapons/Weapon'
+import { Pistol } from '../weapons/Pistol'
+import { ColliderBox, UpdateContext } from '../types'
 
 const PITCH_LIMIT = (PITCH_LIMIT_DEG * Math.PI) / 180
 
-export class Player {
+export class Player implements Entity {
   camera: THREE.PerspectiveCamera
   position: THREE.Vector3
   hp = 100
@@ -17,19 +20,20 @@ export class Player {
   private yaw = 0
   private pitch = 0
   private moveDir = new THREE.Vector3()
-  private walls: ColliderBox[]
+  private weapon: Weapon;
 
-  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2, walls: ColliderBox[] = []) {
+  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2) {
     this.camera = camera
     this.position = new THREE.Vector3(spawnX, PLAYER_EYE_HEIGHT, spawnZ)
     this.yaw = Math.PI
     this.camera.position.copy(this.position)
-    this.walls = walls
+    this.weapon = new Pistol(this.camera)
   }
 
-  update(dt: number, input: InputManager) {
-    this.handleLook(input)
-    this.handleMove(dt, input)
+  update(dt: number, ctx: UpdateContext) {
+    this.handleLook(ctx.input)
+    this.handleMove(dt, ctx.input, ctx.colliders)
+    this.updateWeapon(dt, ctx)
   }
 
   private handleLook(input: InputManager) {
@@ -50,7 +54,7 @@ export class Player {
     )
   }
 
-  private handleMove(dt: number, input: InputManager) {
+  private handleMove(dt: number, input: InputManager, colliders: ColliderBox[]) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const right   = new THREE.Vector3( Math.cos(this.yaw), 0, -Math.sin(this.yaw))
 
@@ -68,16 +72,24 @@ export class Player {
     const newZ = this.position.z + this.moveDir.z * PLAYER_SPEED * dt
 
     // Axis-separated collision – allows sliding along walls
-    const blockedX = this.walls.some(b => this.overlapsBox(newX, this.position.z, b))
+    const blockedX = colliders.some(b => this.overlapsBox(newX, this.position.z, b))
     if (!blockedX) this.position.x = newX
 
-    const blockedZ = this.walls.some(b => this.overlapsBox(this.position.x, newZ, b))
+    const blockedZ = colliders.some(b => this.overlapsBox(this.position.x, newZ, b))
     if (!blockedZ) this.position.z = newZ
 
     this.camera.position.copy(this.position)
   }
 
+  private updateWeapon(dt: number, ctx: UpdateContext) {
+    this.weapon.update(dt, ctx)
+  }
+
   get isMoving(): boolean {
     return this.moveDir.lengthSq() > 0
+  }
+
+  public dispose(): void{
+    this.weapon.dispose()
   }
 }

@@ -4,6 +4,8 @@ import { loadPixelTexture } from '../core/AssetLoader'
 import { StateMachine } from '../states/StateMachine'
 import {EnemyState} from '../states/EnemyState'
 import { EnemyAI } from './enemyAI/EnemyAI'
+import { Damageable, UpdateContext } from '../types'
+import { Entity } from './Entity'
 
 const COLOR_ALIVE    = 0xffffff
 const COLOR_DEAD     = 0x555555
@@ -11,22 +13,20 @@ const COLOR_FLASH    = 0xff8888
 const FLASH_DURATION = 0.12
 
 // Sprite-Sheet: 102 frames horizontal in RoboOrginalNew.png
-
 const TOTAL_FRAMES = 102
 
-export class Enemy {
-  mesh: THREE.Sprite
-  position: THREE.Vector3
+export class Enemy implements Entity, Damageable {
+  public mesh: THREE.Sprite
+  public position: THREE.Vector3
   readonly yMin: number
   readonly yMax: number
-  hp = ENEMY_HP
-  alive = true
-  flashTimer = 0
+  private hp = ENEMY_HP
+  private alive = true
+  public flashTimer = 0
 
   public facing: THREE.Vector3 = new THREE.Vector3(0, 0, -1)
   
   private enemyAI: EnemyAI;
-
 
   //Test value
   private activity: 'idle' | 'walk' | 'shoot' | 'dead' = 'idle'
@@ -45,7 +45,7 @@ export class Enemy {
     this.mesh.scale.set(0.8, 0.8, 0.8)
     this.mesh.position.copy(this.position)
     this.enemyAI = new EnemyAI(this);
-
+    
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
       this.texture = tex
 
@@ -79,11 +79,6 @@ export class Enemy {
 
       this.sm.start(EnemyState.IdleFront)
     })
-  }
-
-  public setActivity(activity: 'idle' | 'walk' | 'shoot'): void {
-    if (!this.alive) return
-    this.activity = activity
   }
 
   private get mat(): THREE.SpriteMaterial {
@@ -173,7 +168,6 @@ export class Enemy {
     
   }
 
-
   private updateEnemyState(dt: number, playerPos: THREE.Vector3): void {
     if (this.sm) {
       if (this.alive && playerPos) {
@@ -186,10 +180,10 @@ export class Enemy {
   }
 
 
-  public update(dt: number, playerPos: THREE.Vector3): void {
+  public update(dt: number, ctx: UpdateContext): void {
 
-    this.enemyAI.update(dt, playerPos);
-    this.updateEnemyState(dt, playerPos)
+    this.enemyAI.update(dt, ctx.player.position);
+    this.updateEnemyState(dt, ctx.player.position)
     this.mesh.position.copy(this.position)
 
 
@@ -201,7 +195,6 @@ export class Enemy {
     }
   }
 
-  
   public takeDamage(amount: number): void {
     this.hp -= amount
     if (this.hp <= 0) {
@@ -213,7 +206,16 @@ export class Enemy {
     this.flashTimer = FLASH_DURATION
   }
 
-  dispose() {
+  public isAlive(): boolean {
+    return this.alive
+  }
+
+  public setActivity(activity: 'idle' | 'walk' | 'shoot'): void {
+    if (!this.alive) return
+    this.activity = activity
+  }
+
+  public dispose() {
     this.texture?.dispose()
     this.mesh.material.dispose()
   }

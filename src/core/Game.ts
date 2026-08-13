@@ -6,7 +6,6 @@ import { InputManager } from './InputManager'
 import { Player } from '../entities/Player'
 import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
-import { Pistol } from '../weapons/Pistol'
 import { ScanlineShader } from '../shaders/ScanlineShader'
 import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
 import {
@@ -14,7 +13,7 @@ import {
   AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY,
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, FRAME_CAP,
 } from '../GameConstants'
-import { GameState } from '../types'
+import { GameState, UpdateContext } from '../types'
 
 
 export const FRAME_DT_CAP = 0.05
@@ -30,7 +29,6 @@ export class Game {
   private composer!: EffectComposer
   private scanlinePass!: ShaderPass
   private player!: Player
-  private pistol!: Pistol
   private field!: GameField
   private enemyFacingDebug?: EnemyFacingDebug
   private projectiles: Projectile[] = []
@@ -38,7 +36,7 @@ export class Game {
   private fps = 0
   private fpsEl: HTMLElement
   private debugShowEnemyFacing = false
-
+  private ctx!: UpdateContext
 
 
   constructor(canvas: HTMLCanvasElement) {
@@ -103,10 +101,21 @@ export class Game {
     this.field = GameField.getInstance()
     this.field.render(this.scene)
 
-    this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z, this.field.colliders)
-    this.pistol = new Pistol(this.camera)
-
+    this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z)
     
+    this.ctx = {
+      dt: 0,
+      input: this.input,
+      camera: this.camera,
+      colliders: this.field.colliders,
+      enemies: this.field.enemies,
+      player: this.player,
+      spawnProjectile: (p: Projectile) => {
+        this.projectiles.push(p)
+        this.scene.add(p.mesh)
+      }
+    }
+
   }
 
   start() {
@@ -137,48 +146,25 @@ export class Game {
   update(dt: number) {
     if (this.state !== GameState.PLAYING) return
 
-    this.player.update(dt, this.input)
-    console.log(this.player.position.x, this.player.position.y, this.player.position.z)
-
-
-    this.updateWeapon(dt);
-    this.updateProjectiles(dt)
+    this.ctx.dt = dt
+    this.player.update(dt, this.ctx)
     this.updateEnemies(dt);
+    this.updateProjectiles(dt, this.ctx)
   }
 
   render() {
     this.composer.render()
   }
 
-  private updateWeapon(dt: number) {
-    const newProjectile = this.pistol.update(dt, this.input, this.camera)
-    if (newProjectile) {
-      this.scene.add(newProjectile.mesh)
-      this.projectiles.push(newProjectile)
-    }
-  }
-
-  private updateProjectiles(dt: number) : void {
-    const enemies = this.field.enemies
-    for (const p of this.projectiles) {
-      p.update(dt, this.field.colliders, enemies)
-      if (!p.alive) {
-        this.scene.remove(p.mesh)
-        p.dispose()
-      }
-    }
-    this.projectiles = this.projectiles.filter(p => p.alive)
-
-  }
 
   private updateEnemies(dt: number) : void {
     const enemies = this.field.enemies
     for (const enemy of enemies) {
-      enemy.update(dt, this.camera.position)
+      enemy.update(dt, this.ctx)
     }
 
     for (let i = enemies.length - 1; i >= 0; i--) {
-      if (!enemies[i].alive && enemies[i].flashTimer <= 0) {
+      if (!enemies[i].isAlive() && enemies[i].flashTimer <= 0) {
         const e = enemies[i]
         this.scene.remove(e.mesh)
         e.dispose()
@@ -191,7 +177,6 @@ export class Game {
 
   public toggleEnemyFacingDebug() {
     
-   
     this.debugShowEnemyFacing = !this.debugShowEnemyFacing
     
 
@@ -203,6 +188,18 @@ export class Game {
     }
 
     document.getElementById('debug')!.textContent = this.debugShowEnemyFacing ? 'DEBUG: ENEMY FACING ON' : ''
+  }
+
+   private updateProjectiles(dt: number, ctx: UpdateContext) : void {
+    for (const p of this.projectiles) {
+      p.update(dt, ctx)
+      if (!p.alive) {
+        this.scene.remove(p.mesh)
+        p.dispose()
+      }
+    }
+    this.projectiles = this.projectiles.filter(p => p.alive)
+
   }
 }
 
