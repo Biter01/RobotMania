@@ -3,12 +3,13 @@ import { Enemy } from '../Enemy'
 import * as THREE from 'three'
 import { AstarPathfinding } from './AstarPathfinding';
 import { GameField } from '../../world/GameField';
+import { ColliderBox } from '../../types';
 
 export class EnemyAI {
     
     readonly enemy: Enemy;
     readonly sightRange = 50;
-    readonly attackRange = 5;
+    readonly attackRange = 8;
     readonly speed = 3;
     readonly replanInterval = 0.5;   // Sekunden zwischen A*-Läufen (siehe Hinweis unten)
 
@@ -33,7 +34,7 @@ export class EnemyAI {
         this.enemy = enemy;
     }
 
-    public update(dt:number,playerPos: THREE.Vector3): void {
+    public update(dt:number,playerPos: THREE.Vector3, colliders: ColliderBox[]): void {
         if (!this.enemy.sm) return;
 
         const inAttackRange = this.isPlayerInAttackRange(this.enemy.position, playerPos);
@@ -43,8 +44,8 @@ export class EnemyAI {
 
         if (inAttackRange) {
 
-             if((randomSeed > 0.99 || this.isWandering)) {
-                this.wanderSide(playerPos,dt)
+             if((randomSeed > 0.97 || this.isWandering)) {
+                this.wanderSide(playerPos,dt,colliders);
             }
             
             if(this.isWandering) {
@@ -104,7 +105,7 @@ export class EnemyAI {
     }
 
 
-     private wanderSide(playerPos: THREE.Vector3,dt: number) {
+     private wanderSide(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
         if(this.wanderTimer == this.wanderTime) {
             this.wanderRight = Math.random() > 0.5; // Zufällige Richtung für das Wandern
         }
@@ -120,13 +121,31 @@ export class EnemyAI {
         const toTarget = EnemyAI._toTarget3.subVectors(playerPos, this.enemy.position).normalize();
         const right = EnemyAI._right.crossVectors(toTarget, EnemyAI._up).normalize();
 
-        if (this.wanderRight) {
+        const canMoveRight = this.canMove(colliders, right,this.speed ,dt)
+        const canMoveLeft = this.canMove(colliders, right.clone().negate(),this.speed ,dt)
+
+        if(!canMoveLeft || !canMoveRight) {
+            this.isWandering = false;
+            this.wanderTimer = 0;
+        }
+
+        if (this.wanderRight && canMoveRight) {
+
             this.enemy.facing = right.clone(); // clone, da facing sonst denselben Scratch-Vektor referenziert
             this.enemy.position.addScaledVector(right, this.speed * dt);
-        } else {
+        } else if(canMoveLeft) {
             this.enemy.facing = right.clone().negate();
-            this.enemy.position.addScaledVector(right, -this.speed * dt);
+            this.enemy.position.addScaledVector(right.clone().negate(), this.speed * dt);
         }
+    }
+
+    private canMove(colliders: ColliderBox[], direction: THREE.Vector3, speed: number, dt: number): boolean {
+        
+        return !colliders.some(b => this.enemy.position.x + direction.x * speed * dt + ENEMY_RADIUS > b.minX &&
+                this.enemy.position.x + direction.x * speed * dt - ENEMY_RADIUS < b.maxX &&
+                this.enemy.position.z + direction.z * speed * dt + ENEMY_RADIUS > b.minZ &&
+                this.enemy.position.z + direction.z * speed * dt - ENEMY_RADIUS < b.maxZ)
+
     }
 
     private recomputePath(playerPos: THREE.Vector3): void {

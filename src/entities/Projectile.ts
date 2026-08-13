@@ -94,6 +94,16 @@ function segmentHitsCircle(
   return nearY >= yMin && nearY <= yMax
 }
 
+interface ProjectileConfig {
+  size: THREE.Vector2
+  spawnPosition: THREE.Vector3
+  damage: number
+  spawnOffset: THREE.Vector3
+  shootDir: THREE.Vector3
+  speed: number
+  projectileColor: number
+}
+
 export class Projectile implements Entity {
   mesh: THREE.Mesh
   position: THREE.Vector3
@@ -103,17 +113,16 @@ export class Projectile implements Entity {
   private age = 0
   private prev = new THREE.Vector3()
 
-  constructor(camera: THREE.Camera, damage: number, spawnOffset = new THREE.Vector3()) {
-    this.position = camera.position.clone().add(spawnOffset)
+  constructor(config: ProjectileConfig) {
+    this.position = config.spawnPosition.clone().add(config.spawnOffset)
     this.prev.copy(this.position)
-    this.damage = damage
+    this.damage = config.damage
 
-    const dir = new THREE.Vector3()
-    camera.getWorldDirection(dir)
-    this.velocity = dir.multiplyScalar(PROJECTILE_SPEED)
+    const dir = config.shootDir.clone().normalize()
+    this.velocity = dir.multiplyScalar(config.speed)
 
-    const geo = new THREE.SphereGeometry(PROJECTILE_MESH_RADIUS, 6, 6)
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff })
+    const geo = new THREE.SphereGeometry(PROJECTILE_MESH_RADIUS, config.size.x, config.size.y)
+    const mat = new THREE.MeshBasicMaterial({ color: config.projectileColor })
     this.mesh = new THREE.Mesh(geo, mat)
     this.mesh.position.copy(this.position)
   }

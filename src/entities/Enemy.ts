@@ -6,6 +6,7 @@ import {EnemyState} from '../states/EnemyState'
 import { EnemyAI } from './enemyAI/EnemyAI'
 import { Damageable, UpdateContext } from '../types'
 import { Entity } from './Entity'
+import { Projectile } from './Projectile'
 
 const COLOR_ALIVE    = 0xffffff
 const COLOR_DEAD     = 0x555555
@@ -35,8 +36,10 @@ export class Enemy implements Entity, Damageable {
   private texture: THREE.Texture | null = null
   public sm: StateMachine<EnemyState> | null = null
   
+  readonly attackCooldown; // Sekunden zwischen Angriffen
+  private cooldownTimer; // Timer für den Angriff
 
-  constructor(x: number, z: number) {
+  constructor(x: number, z: number, attackCooldown = 0.3) {
     this.position = new THREE.Vector3(x, 0.4, z)
     this.yMin = 0
     this.yMax = 1.4
@@ -45,7 +48,9 @@ export class Enemy implements Entity, Damageable {
     this.mesh.scale.set(0.8, 0.8, 0.8)
     this.mesh.position.copy(this.position)
     this.enemyAI = new EnemyAI(this);
-    
+    this.cooldownTimer = attackCooldown;
+    this.attackCooldown = attackCooldown;
+
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
       this.texture = tex
 
@@ -182,10 +187,13 @@ export class Enemy implements Entity, Damageable {
 
   public update(dt: number, ctx: UpdateContext): void {
 
-    this.enemyAI.update(dt, ctx.player.position);
+    this.enemyAI.update(dt, ctx.player.position, ctx.colliders);
     this.updateEnemyState(dt, ctx.player.position)
     this.mesh.position.copy(this.position)
 
+    if(this.activity === 'shoot') {
+      this.attackPlayer(ctx, dt)
+    }
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt
@@ -193,6 +201,35 @@ export class Enemy implements Entity, Damageable {
         this.mat.color.setHex(this.alive ? COLOR_ALIVE : COLOR_DEAD)
       }
     }
+  }
+
+  private attackPlayer(ctx: UpdateContext, dt: number): void {
+    
+    this.cooldownTimer -= dt
+    if(this.cooldownTimer <= 0) {
+      const playerPos = ctx.player.position.clone()
+      const toPlayer = playerPos.clone().sub(this.position)
+      //toPlayer.y = 0
+      toPlayer.normalize()
+
+      const size = new THREE.Vector2(3, 3)
+
+      const projectile = new Projectile({
+        size,
+        spawnPosition: this.position,
+        damage: 10,
+        spawnOffset: new THREE.Vector3(toPlayer.x, 0, toPlayer.z),
+        shootDir: toPlayer,
+        speed: 50,
+        projectileColor: 0xdb4646,
+      })
+
+      ctx.spawnProjectile(projectile)
+
+      this.cooldownTimer = this.attackCooldown
+    }
+
+
   }
 
   public takeDamage(amount: number): void {
