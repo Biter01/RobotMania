@@ -1,6 +1,6 @@
 import * as THREE from 'three'
 import { ColliderBox, UpdateContext } from '../types'
-import { PROJECTILE_SPEED, ENEMY_RADIUS } from '../GameConstants'
+import { ENEMY_RADIUS } from '../GameConstants'
 import { Entity } from './Entity'
 
 const PROJECTILE_LIFETIME = 3.0
