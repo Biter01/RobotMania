@@ -1,31 +1,45 @@
 import * as THREE from 'three'
-import { ColliderBox, UpdateContext } from '../types'
-import { ENEMY_RADIUS } from '../GameConstants'
+import { ColliderBox, UpdateContext, DamageGroup } from '../types'
+import { ENEMY_RADIUS, PLAYER_RADIUS } from '../GameConstants'
 import { Entity } from './Entity'
+import { Enemy } from './Enemy'
+
+
 
 const PROJECTILE_LIFETIME = 3.0
 const PROJECTILE_MESH_RADIUS = 0.08
 
-function segmentHitsBox(ox: number, oz: number, dx: number, dz: number, box: ColliderBox): boolean {
+
+interface ProjectileGeometry {
+  ox: number
+  oy: number 
+  oz: number // Starting point x,y,z
+  dx: number 
+  dy: number 
+  dz: number // Movement Vector sphere
+}
+
+
+function segmentHitsBox(proGeo: ProjectileGeometry, box: ColliderBox): boolean {
   let tmin = 0
   let tmax = 1
   
-  if (Math.abs(dx) < 1e-9) {
-    if (ox < box.minX || ox > box.maxX) return false
+  if (Math.abs(proGeo.dx) < 1e-9) {
+    if (proGeo.ox < box.minX || proGeo.ox > box.maxX) return false
   } else {
-    let t1 = (box.minX - ox) / dx
-    let t2 = (box.maxX - ox) / dx
+    let t1 = (box.minX - proGeo.ox) / proGeo.dx
+    let t2 = (box.maxX - proGeo.ox) / proGeo.dx
     if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp }
     tmin = Math.max(tmin, t1)
     tmax = Math.min(tmax, t2)
     if (tmin > tmax) return false
   }
 
-  if (Math.abs(dz) < 1e-9) {
-    if (oz < box.minZ || oz > box.maxZ) return false
+  if (Math.abs(proGeo.dz) < 1e-9) {
+    if (proGeo.oz < box.minZ || proGeo.oz > box.maxZ) return false
   } else {
-    let t1 = (box.minZ - oz) / dz
-    let t2 = (box.maxZ - oz) / dz
+    let t1 = (box.minZ - proGeo.oz) / proGeo.dz
+    let t2 = (box.maxZ - proGeo.oz) / proGeo.dz
     if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp }
     tmin = Math.max(tmin, t1)
     tmax = Math.min(tmax, t2)
@@ -36,15 +50,14 @@ function segmentHitsBox(ox: number, oz: number, dx: number, dz: number, box: Col
 }
 
 function segmentHitsCircle(
-  ox: number, oy: number, oz: number, // Startpunkt der Kugel
-  dx: number, dy: number, dz: number, // Bewegungsvektor der Kugel (Segment)
+  proGeo: ProjectileGeometry,
   cx: number, cz: number,            // Zentrum des Gegners (XZ)
   radius: number,                    // Radius des Gegners (XZ-Kreis)
   yMin: number, yMax: number,       // Höhe des Zylinders
 ): boolean {
 
   // Länge der Bewegung im XZ-Bereich (für Projektion)
-  const lenSq = dx * dx + dz * dz
+  const lenSq = proGeo.dx * proGeo.dx + proGeo.dz * proGeo.dz
 
   // ------------------------------------------------------------
   // 1. PROJEKTION:
@@ -58,7 +71,7 @@ function segmentHitsCircle(
         0,
         Math.min(
           1,
-          ((cx - ox) * dx + (cz - oz) * dz) / lenSq
+          ((cx - proGeo.ox) * proGeo.dx + (cz - proGeo.oz) * proGeo.dz) / lenSq
         )
       )
     : 0
@@ -69,8 +82,8 @@ function segmentHitsCircle(
   // Punkt auf der Flugbahn bei t
   // und Abstand zum Kreiszentrum
   // ------------------------------------------------------------
-  const nearX = ox + t * dx - cx
-  const nearZ = oz + t * dz - cz
+  const nearX = proGeo.ox + t * proGeo.dx - cx
+  const nearZ = proGeo.oz + t * proGeo.dz - cz
 
   // ------------------------------------------------------------
   // 3. HORIZONTALER TEST (XZ-Ebene)
@@ -88,7 +101,7 @@ function segmentHitsCircle(
   //
   // Berechne Y-Position des gleichen Punktes auf der Linie
   // ------------------------------------------------------------
-  const nearY = oy + t * dy
+  const nearY = proGeo.oy + t * proGeo.dy
 
   // Prüfe ob der Punkt innerhalb der Zylinder-Höhe liegt
   return nearY >= yMin && nearY <= yMax
@@ -102,7 +115,9 @@ interface ProjectileConfig {
   shootDir: THREE.Vector3
   speed: number
   projectileColor: number
+  damageGroup: DamageGroup   // NEU
 }
+
 
 export class Projectile implements Entity {
   mesh: THREE.Mesh
@@ -112,6 +127,7 @@ export class Projectile implements Entity {
   damage: number
   private age = 0
   private prev = new THREE.Vector3()
+  private group: DamageGroup
 
   constructor(config: ProjectileConfig) {
     this.position = config.spawnPosition.clone().add(config.spawnOffset)
@@ -125,6 +141,7 @@ export class Projectile implements Entity {
     const mat = new THREE.MeshBasicMaterial({ color: config.projectileColor })
     this.mesh = new THREE.Mesh(geo, mat)
     this.mesh.position.copy(this.position)
+    this.group = config.damageGroup
   }
 
   update(dt: number, ctx: UpdateContext) {
@@ -138,28 +155,57 @@ export class Projectile implements Entity {
     this.position.addScaledVector(this.velocity, dt)
     this.mesh.position.copy(this.position)
 
-    const ox = this.prev.x
-    const oy = this.prev.y
-    const oz = this.prev.z
-    const dx = this.position.x - ox
-    const dy = this.position.y - oy
-    const dz = this.position.z - oz
+    
+
+    const proGeo: ProjectileGeometry = { 
+        ox:  this.prev.x,
+        oy: this.prev.y,
+        oz: this.prev.z,
+        dx: this.position.x - this.prev.x,
+        dy: this.position.y - this.prev.y,
+        dz: this.position.z - this.prev.z
+    }
+
 
     for (const box of ctx.colliders) {
-      if (segmentHitsBox(ox, oz, dx, dz, box)) {
+      if (segmentHitsBox(proGeo, box)) {
         this.alive = false
         return
       }
     }
 
-    for (const enemy of ctx.enemies) {
-      if (!enemy.isAlive) continue
-      if (segmentHitsCircle(ox, oy, oz, dx, dy, dz, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)) {
-        enemy.takeDamage(this.damage)
-        this.alive = false
-        return
-      }
+
+    if(this.group == DamageGroup.Enemy) {
+        for (const enemy of ctx.enemies) {
+          if (!enemy.isAlive) continue
+          if (this.enemyIsHit(proGeo,enemy)) {
+            enemy.takeDamage(this.damage)
+            this.alive = false
+            return
+          }
+        }
+    } else {
+        if(this.playerIsHit(proGeo, ctx, 0, 1.4)) {
+          ctx.player.takeDamage(this.damage)
+          this.alive = false
+        }
     }
+  }
+
+  private playerIsHit(
+      proGeo: ProjectileGeometry,
+      ctx: UpdateContext,
+      yMin: number, yMax: number,       // Höhe des Zylinders): boolean {
+
+  ): boolean {
+    return segmentHitsCircle(proGeo, ctx.player.position.x,ctx.player.position.z,PLAYER_RADIUS,yMin,yMax)
+  }
+      
+  private enemyIsHit(
+      proGeo: ProjectileGeometry,
+      enemy: Enemy
+  ): boolean {  
+    return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)
   }
 
   dispose() {

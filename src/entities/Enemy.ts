@@ -4,7 +4,7 @@ import { loadPixelTexture } from '../core/AssetLoader'
 import { StateMachine } from '../states/StateMachine'
 import {EnemyState} from '../states/EnemyState'
 import { EnemyAI } from './enemyAI/EnemyAI'
-import { Damageable, UpdateContext } from '../types'
+import { Damageable, UpdateContext, DamageGroup } from '../types'
 import { Entity } from './Entity'
 import { Projectile } from './Projectile'
 
@@ -28,8 +28,6 @@ export class Enemy implements Entity, Damageable {
   public facing: THREE.Vector3 = new THREE.Vector3(0, 0, -1)
   
   private enemyAI: EnemyAI;
-
-  //Test value
   private activity: 'idle' | 'walk' | 'shoot' | 'dead' = 'idle'
   private static readonly _toViewer = new THREE.Vector3()
 
@@ -184,7 +182,6 @@ export class Enemy implements Entity, Damageable {
     }
   }
 
-
   public update(dt: number, ctx: UpdateContext): void {
 
     this.enemyAI.update(dt, ctx.player.position, ctx.colliders);
@@ -222,14 +219,13 @@ export class Enemy implements Entity, Damageable {
         shootDir: toPlayer,
         speed: 50,
         projectileColor: 0xdb4646,
+        damageGroup: DamageGroup.Player
       })
 
       ctx.spawnProjectile(projectile)
 
       this.cooldownTimer = this.attackCooldown
     }
-
-
   }
 
   public takeDamage(amount: number): void {

@@ -1,24 +1,32 @@
 import { Game } from './core/Game'
 import { GameState } from './types'
+import { UIRenderer } from './ui/UIRenderer'
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
-const menuOverlay = document.getElementById('menu-overlay') as HTMLDivElement
 
-const game = new Game(canvas)
+let game: Game  = new Game(canvas)
 
+const ui = UIRenderer.getInstance()
 
-// Start on first click
-menuOverlay.addEventListener('click', () => {
-  menuOverlay.style.display = 'none'
-  game.setState(GameState.PLAYING)
-  game.start()
-}, { once: true })
+ui.on('start', () => {
+    game.setState(GameState.PLAYING)
+    game.start()
+})
+
+ui.on('retry', () => {
+    game.dispose()
+    game = new Game(canvas)
+    game.setState(GameState.PLAYING)
+    game.start()
+})
+
+// initiales Rendern des Menüs
+ui.render(GameState.MENU)
 
 document.addEventListener('keydown', (keyboardEvent: KeyboardEvent) => {
-  
   if (keyboardEvent.key === 'Tab') {
       keyboardEvent.preventDefault(); // wichtig, siehe unten
-      game.toggleEnemyFacingDebug();
+      game.toggleDebug();
       // z. B. game.toggleSomething();
   }
 })

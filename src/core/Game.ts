@@ -6,7 +6,10 @@ import { InputManager } from './InputManager'
 import { Player } from '../entities/Player'
 import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
+
 import { ScanlineShader } from '../shaders/ScanlineShader'
+import { DamageFlashShader } from '../shaders/DamageFlashShader'
+
 import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
 import {
   COLOR_SKY,
@@ -14,7 +17,7 @@ import {
   CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, FRAME_CAP,
 } from '../GameConstants'
 import { GameState, UpdateContext } from '../types'
-
+import { UIRenderer } from '../ui/UIRenderer'
 
 export const FRAME_DT_CAP = 0.05
 
@@ -24,20 +27,20 @@ export class Game {
   camera: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
   input: InputManager
-  state: GameState = GameState.MENU
+  state: GameState
 
   private composer!: EffectComposer
   private scanlinePass!: ShaderPass
+  private damageFlashPass!: ShaderPass
+
   private player!: Player
   private field!: GameField
   private enemyFacingDebug?: EnemyFacingDebug
   private projectiles: Projectile[] = []
   private lastTime = 0
   private fps = 0
-  private fpsEl: HTMLElement
-  private debugShowEnemyFacing = false
+  private debug = false
   private ctx!: UpdateContext
-
 
   constructor(canvas: HTMLCanvasElement) {
     this.scene = new THREE.Scene()
@@ -50,9 +53,9 @@ export class Game {
     this.renderer.setPixelRatio(window.devicePixelRatio)
     this.renderer.setSize(window.innerWidth, window.innerHeight)
 
-    this.setupPostProcessing()
+    this.state = GameState.MENU
 
-    this.fpsEl = document.getElementById('fps') as HTMLElement
+    this.setupPostProcessing()
 
     this.input = new InputManager(canvas, () => this.state)
 
@@ -72,7 +75,7 @@ export class Game {
   }
 
   /*
-    This class represents a render pass. 
+    This class RenderPass represents a render pass. 
     It takes a camera and a scene and produces a beauty pass for subsequent post processing effects.
   */
   private setupPostProcessing() {
@@ -82,16 +85,24 @@ export class Game {
     this.scanlinePass = new ShaderPass(ScanlineShader)
     this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
     this.composer.addPass(this.scanlinePass)
+
+
+    //New Damage Flash Shader!! Builds upon scanline Shader
+    this.damageFlashPass = new ShaderPass(DamageFlashShader)
+    this.composer.addPass(this.damageFlashPass)
   }
 
   setState(next: GameState) {
     this.state = next
-    document.body.classList.toggle('playing', next === GameState.PLAYING)
+  
+    UIRenderer.getInstance().render(next)
+    // Release the pointer lock so the mouse cursor is available for the retry button
+    if (next === GameState.GAMEOVER) {
+      document.exitPointerLock()
+    }
   }
 
   init() {
-
-
     this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
     const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     dir.position.set(5, 10, 5)
@@ -102,6 +113,7 @@ export class Game {
     this.field.render(this.scene)
 
     this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z)
+    this.player.setDamageShader(this.damageFlashPass)
     
     this.ctx = {
       dt: 0,
@@ -135,27 +147,40 @@ export class Game {
     requestAnimationFrame(this.loop)
   }
 
+  private updateHud() {
+    const health = Math.max(this.player.getHealth(),0)
+    UIRenderer.getInstance().updateHud({
+        fps: this.fps,
+        health: health,
+        debug: this.debug
+    })
+  }
+
   private calculateFPS(rawDt: number) {
     this.fps = this.fps * 0.9 + (1 / rawDt) * 0.1
-
     this.fps = Math.min(this.fps, FRAME_CAP)
-
-    if (this.fpsEl) this.fpsEl.textContent = `FPS: ${Math.round(this.fps)}`
   }
 
   update(dt: number) {
-    if (this.state !== GameState.PLAYING) return
+    if (this.state !== GameState.PLAYING) {
+      return
+    } 
+
+    if(!this.player.isAlive()) {
+      this.setState(GameState.GAMEOVER)
+      return
+    }
 
     this.ctx.dt = dt
     this.player.update(dt, this.ctx)
     this.updateEnemies(dt);
     this.updateProjectiles(dt, this.ctx)
+    this.updateHud()
   }
 
   render() {
     this.composer.render()
   }
-
 
   private updateEnemies(dt: number) : void {
     const enemies = this.field.enemies
@@ -175,19 +200,20 @@ export class Game {
     this.enemyFacingDebug?.update(enemies)
   }
 
-  public toggleEnemyFacingDebug() {
+  public toggleDebug() {
     
-    this.debugShowEnemyFacing = !this.debugShowEnemyFacing
+    this.debug = !this.debug
     
+    this.player.setInvincible(true);
 
-    if( this.debugShowEnemyFacing) {
+    if( this.debug) {
       this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
     } else {
       this.enemyFacingDebug?.dispose()
       this.enemyFacingDebug = undefined
-    }
 
-    document.getElementById('debug')!.textContent = this.debugShowEnemyFacing ? 'DEBUG: ENEMY FACING ON' : ''
+      this.player.setInvincible(false);
+    }
   }
 
    private updateProjectiles(dt: number, ctx: UpdateContext) : void {
@@ -199,7 +225,20 @@ export class Game {
       }
     }
     this.projectiles = this.projectiles.filter(p => p.alive)
+  }
 
+  public dispose() {
+    this.composer.dispose()
+    this.scanlinePass.dispose()
+    this.damageFlashPass.dispose()
+    this.renderer.dispose()
+
+    this.field.dispose()
+    this.player.dispose()
+
+    for (const p of this.projectiles) {
+      p.dispose()
+    }
   }
 }
 

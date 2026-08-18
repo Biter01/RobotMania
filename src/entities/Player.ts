@@ -5,22 +5,30 @@ import {
   PLAYER_SPEED, PLAYER_RADIUS, PLAYER_EYE_HEIGHT,
   MOUSE_SENSITIVITY, PITCH_LIMIT_DEG,
 } from '../GameConstants'
+import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js'
 import { Entity } from './Entity'  
 import { Weapon } from '../weapons/Weapon'
 import { Pistol } from '../weapons/Pistol'
-import { ColliderBox, UpdateContext } from '../types'
+import { ColliderBox, Damageable, UpdateContext } from '../types'
 
 const PITCH_LIMIT = (PITCH_LIMIT_DEG * Math.PI) / 180
 
-export class Player implements Entity {
+export class Player implements Entity, Damageable {
   camera: THREE.PerspectiveCamera
   position: THREE.Vector3
-  hp = 100
+  private health = 100
+  private invincible = false;
 
   private yaw = 0
   private pitch = 0
   private moveDir = new THREE.Vector3()
   private weapon: Weapon;
+  
+  //Damage Shader private fields
+  private damageFlashIntensity = 0
+  private damageShaderPass!: ShaderPass
+  private readonly DAMAGE_FLASH_DECAY_RATE = 3 
+  private readonly DAMAGE_FLASH_PER_DAMAGE = 0.05
 
   constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2) {
     this.camera = camera
@@ -34,8 +42,22 @@ export class Player implements Entity {
     this.handleLook(ctx.input)
     this.handleMove(dt, ctx.input, ctx.colliders)
     this.updateWeapon(dt, ctx)
+
+    this.updateDamageShader(dt)
   }
 
+  private updateDamageShader(dt: number) {
+    this.damageFlashIntensity = clamp(
+      this.damageFlashIntensity - this.DAMAGE_FLASH_DECAY_RATE * dt,
+      0, 1
+    )
+    this.damageShaderPass.uniforms.intensity.value = this.damageFlashIntensity
+  }
+
+  public setDamageShader(shader: ShaderPass): void {
+    this.damageShaderPass = shader
+  }
+  
   private handleLook(input: InputManager) {
     const { dx, dy } = input.consumeMouse()
     this.yaw   -= dx * MOUSE_SENSITIVITY
@@ -81,6 +103,24 @@ export class Player implements Entity {
     this.camera.position.copy(this.position)
   }
 
+  public takeDamage(amount: number): void {
+    if(this.invincible) {
+      return
+    }
+  
+    this.health -= amount;
+
+    this.damageFlashIntensity = clamp(
+      this.damageFlashIntensity + amount * this.DAMAGE_FLASH_PER_DAMAGE,
+      0, 1
+    )
+
+  }
+
+  public isAlive(): boolean {
+    return this.health > 0
+  }
+
   private updateWeapon(dt: number, ctx: UpdateContext) {
     this.weapon.update(dt, ctx)
   }
@@ -91,5 +131,13 @@ export class Player implements Entity {
 
   public dispose(): void{
     this.weapon.dispose()
+  }
+
+  public setInvincible(boolVal:boolean):void {
+    this.invincible = boolVal
+  }
+
+  public getHealth() {
+    return this.health;
   }
 }

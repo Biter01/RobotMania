@@ -77,11 +77,76 @@
         letter-spacing: 2px;
         animation: blink 1s step-end infinite;
       }
+      
+      #gameover-overlay {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.85);
+        color: #fff;
+        font-family: 'Courier New', monospace;
+        z-index: 100;
+      }
+
+      #gameover-overlay.visible {
+        display: flex;
+      }
+
+      #gameover-overlay h1 {
+        font-size: 3rem;
+        letter-spacing: 8px;
+        color: #e00;
+        text-shadow: 4px 4px 0 #800;
+        margin-bottom: 2rem;
+        image-rendering: pixelated;
+      }
+
+      #retry-button {
+        background: none;
+        border: none;
+        color: #fff;
+        font-family: inherit;
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+      }
+
+      #retry-button .retry-icon {
+        font-size: 3rem;
+        line-height: 1;
+        color: #fff;
+        text-shadow: 3px 3px 0 #800;
+      }
+
+      #retry-button .retry-label {
+        font-size: 1rem;
+        letter-spacing: 2px;
+        animation: blink 1s step-end infinite;
+      }
+
+      #retry-button:hover .retry-icon,
+      #retry-button:focus-visible .retry-icon {
+        color: #e00;
+      }
 
      #debug {
         position: absolute;
         top: 12px;
         right: 12px;
+        font-size: 0.85rem;
+        color: #fff;
+        text-shadow: 1px 1px 2px #000;
+      }
+
+      #health {
+        position: absolute;
+        top: 30px;
+        left: 12px;
         font-size: 0.85rem;
         color: #fff;
         text-shadow: 1px 1px 2px #000;
@@ -94,14 +159,26 @@
   </head>
   <body>
     <canvas id="game-canvas"></canvas>
+    <div id="game-ui">
+    </div>
+    <!-- 
     <div id="hud">
       <span id="fps"></span>
       <span id="debug"></span>
+      <span id="health"></span>
     </div>
     <div id="menu-overlay">
       <h1>ROBOT MANIA</h1>
       <p>[ CLICK TO START ]</p>
     </div>
-    <script type="module" src="/src/main.ts"></script> 
+    <div id="gameover-overlay">
+      <h1>GAME OVER</h1>
+      <button id="retry-button">
+        <span class="retry-icon">&#8635;</span>
+        <span class="retry-label">[ RETRY ]</span>
+      </button>
+    </div>
+    -->
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

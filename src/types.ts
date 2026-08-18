@@ -42,3 +42,8 @@ export interface UpdateContext {
   player: Player
   spawnProjectile: (p: Projectile) => void 
 }
+
+export enum DamageGroup {
+  Player,
+  Enemy
+}

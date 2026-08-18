@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { Projectile } from '../entities/Projectile'
 import { PISTOL_DAMAGE, PISTOL_COOLDOWN, PROJECTILE_SPEED } from '../GameConstants'
 import { Weapon } from './Weapon'
-import { UpdateContext } from '../types'
+import { UpdateContext, DamageGroup} from '../types'
 
 const BARREL_OFFSET_RIGHT = 0;
 const BARREL_OFFSET_DOWN  = 0.3;
@@ -30,6 +30,7 @@ export class Pistol extends Weapon {
               shootDir: shootDir,
               speed: PROJECTILE_SPEED,
               projectileColor: 0xFFFFFF,
+              damageGroup: DamageGroup.Enemy
             })
 
       ctx.spawnProjectile(projectile)
