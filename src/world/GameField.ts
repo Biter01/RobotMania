@@ -88,4 +88,17 @@ export class GameField {
   public isTileWalkable(x: number, z: number): boolean {
     return this.walkableSet.has(`${x},${z}`)
   }
+
+  public dispose() {
+    GameField.instance = null
+    for (const mesh of this.meshes) {
+      mesh.geometry.dispose()
+      ;(mesh.material as THREE.Material).dispose()
+    }
+
+    for (const enemie of this.enemies) {
+      enemie.dispose();
+    }
+
+  }
 }

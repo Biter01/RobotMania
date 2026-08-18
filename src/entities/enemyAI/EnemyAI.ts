@@ -37,30 +37,38 @@ export class EnemyAI {
         const inAttackRange = this.isPlayerInAttackRange(this.enemy.position, playerPos);
         const inSight = this.isPlayerInSight(this.enemy.position, playerPos);
 
-        const randomSeed = Math.random()
-
         if (inAttackRange) {
-
-             if((randomSeed > 0.97 || this.isWandering)) {
-                this.wanderSide(playerPos,dt,colliders);
-            }
-            
-            if(this.isWandering) {
-                this.enemy.setActivity('walk');
-            } else {
-                this.enemy.setActivity('shoot');
-            }
-
-            //this.enemy.attackPlayer(this.enemy, playerPos);
+            this.attackBehaviour(playerPos, dt, colliders);
         } else if (inSight) {
-            this.enemy.setActivity('walk');
-            this.stepTowardsPlayer(dt, playerPos);
+            this.followBehaviour(playerPos, dt)
         } else {
+            //Idle Behaviour
             this.enemy.setActivity('idle');
         }
 
         this.resolveSeparation();
     }
+
+    private attackBehaviour(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
+        const randomSeed = Math.random()
+
+        if((randomSeed > 0.97 || this.isWandering)) {
+            this.wanderSide(playerPos,dt,colliders);
+        }
+            
+        if(this.isWandering) {
+            this.enemy.setActivity('walk');
+        } else {
+            this.enemy.facing = EnemyAI._toTarget3.subVectors(playerPos, this.enemy.position).normalize();
+            this.enemy.setActivity('shoot');
+        }
+    }
+
+    private followBehaviour(playerPos: THREE.Vector3,dt: number): void {
+        this.enemy.setActivity('walk');
+        this.stepTowardsPlayer(dt, playerPos);
+    }
+
 
     private resolveSeparation(): void {
         const minDist = ENEMY_RADIUS;
@@ -90,7 +98,6 @@ export class EnemyAI {
         }
     }
     
-
      private stepTowardsPlayer(dt: number, playerPos: THREE.Vector3): void {
         this.replanTimer -= dt;
         if (this.replanTimer <= 0 || this.path.length === 0) {
@@ -100,7 +107,6 @@ export class EnemyAI {
         //Just follow
         this.followPath(dt);              
     }
-
 
      private wanderSide(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
         if(this.wanderTimer == this.wanderTime) {
@@ -159,7 +165,7 @@ export class EnemyAI {
         const target = this.path[this.pathIndex];
         this.moveTowards(target, this.speed * dt);
         if (this.tileIsReached(this.enemy.position, target)) {
-            this.pathIndex++;                             // nächstes Feld des GECACHTEN Wegs
+            this.pathIndex++;     // next Field of cached way
         }
     }
 
