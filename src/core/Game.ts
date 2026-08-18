@@ -6,7 +6,10 @@ import { InputManager } from './InputManager'
 import { Player } from '../entities/Player'
 import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
+
 import { ScanlineShader } from '../shaders/ScanlineShader'
+import { DamageFlashShader } from '../shaders/DamageFlashShader'
+
 import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
 import {
   COLOR_SKY,
@@ -28,6 +31,8 @@ export class Game {
 
   private composer!: EffectComposer
   private scanlinePass!: ShaderPass
+  private damageFlashPass!: ShaderPass
+
   private player!: Player
   private field!: GameField
   private enemyFacingDebug?: EnemyFacingDebug
@@ -70,7 +75,7 @@ export class Game {
   }
 
   /*
-    This class represents a render pass. 
+    This class RenderPass represents a render pass. 
     It takes a camera and a scene and produces a beauty pass for subsequent post processing effects.
   */
   private setupPostProcessing() {
@@ -80,6 +85,11 @@ export class Game {
     this.scanlinePass = new ShaderPass(ScanlineShader)
     this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
     this.composer.addPass(this.scanlinePass)
+
+
+    //New Damage Flash Shader!! Builds upon scanline Shader
+    this.damageFlashPass = new ShaderPass(DamageFlashShader)
+    this.composer.addPass(this.damageFlashPass)
   }
 
   setState(next: GameState) {
@@ -103,6 +113,7 @@ export class Game {
     this.field.render(this.scene)
 
     this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z)
+    this.player.setDamageShader(this.damageFlashPass)
     
     this.ctx = {
       dt: 0,
@@ -171,7 +182,6 @@ export class Game {
     this.composer.render()
   }
 
-
   private updateEnemies(dt: number) : void {
     const enemies = this.field.enemies
     for (const enemy of enemies) {
@@ -204,7 +214,6 @@ export class Game {
 
       this.player.setInvincible(false);
     }
-
   }
 
    private updateProjectiles(dt: number, ctx: UpdateContext) : void {
@@ -216,12 +225,12 @@ export class Game {
       }
     }
     this.projectiles = this.projectiles.filter(p => p.alive)
-
   }
 
   public dispose() {
     this.composer.dispose()
     this.scanlinePass.dispose()
+    this.damageFlashPass.dispose()
     this.renderer.dispose()
 
     this.field.dispose()

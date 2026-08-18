@@ -51,7 +51,7 @@ export class AstarPathfinding {
     }
 
 
-    /*public findNextTile(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2{
+    public findNextTile(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2{
         this.heap = [];
         
 
@@ -65,7 +65,7 @@ export class AstarPathfinding {
 
         return this.toTileCoordinates(enemyPos);
         //return optimalWay.nextTile;
-    }*/
+    }
 
     private findOptimalWay(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2[] {
         
