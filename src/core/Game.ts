@@ -167,15 +167,6 @@ export class Game {
     })
   }
 
-  private updateHud() {
-    const health = Math.max(this.player.getHealth(),0)
-    UIRenderer.getInstance().updateHud({
-        fps: this.fps,
-        health: health,
-        debug: this.debug
-    })
-  }
-
   private calculateFPS(rawDt: number) {
     this.fps = this.fps * 0.9 + (1 / rawDt) * 0.1
     this.fps = Math.min(this.fps, FRAME_CAP)
