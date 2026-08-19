@@ -100,5 +100,9 @@ export class GameField {
       enemie.dispose();
     }
 
+    // Arrays leeren - sie werden ueber Game.ctx (colliders/enemies) aliased
+    this.meshes.length = 0
+    this.colliders.length = 0
+    this.enemies.length = 0
   }
 }

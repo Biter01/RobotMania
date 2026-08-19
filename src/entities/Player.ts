@@ -21,9 +21,8 @@ export class Player implements Entity, Damageable {
 
   private yaw = 0
   private pitch = 0
-  private moveDir = new THREE.Vector3()
-  private weapon: Weapon;
-  
+  readonly moveDir = new THREE.Vector3()
+  readonly weapon: Weapon
   //Damage Shader private fields
   private damageFlashIntensity = 0
   private damageShaderPass!: ShaderPass
@@ -139,5 +138,9 @@ export class Player implements Entity, Damageable {
 
   public getHealth() {
     return this.health;
+  }
+
+  public isReady(): Promise<void> {
+        return this.weapon.ready
   }
 }

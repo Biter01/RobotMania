@@ -32,6 +32,7 @@ export class Enemy implements Entity, Damageable {
   private static readonly _toViewer = new THREE.Vector3()
 
   private texture: THREE.Texture | null = null
+  private disposed = false
   public sm: StateMachine<EnemyState> | null = null
   
   readonly attackCooldown; // Sekunden zwischen Angriffen
@@ -50,6 +51,13 @@ export class Enemy implements Entity, Damageable {
     this.attackCooldown = attackCooldown;
 
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
+      // Der Enemy kann waehrend des Ladens schon disposed worden sein
+      // (Retry direkt nach dem Start) - sonst leakt diese Textur.
+      if (this.disposed) {
+        tex.dispose()
+        return
+      }
+
       this.texture = tex
 
       tex.wrapS = THREE.RepeatWrapping
@@ -249,7 +257,13 @@ export class Enemy implements Entity, Damageable {
   }
 
   public dispose() {
+    if (this.disposed) return
+    this.disposed = true
+
     this.texture?.dispose()
+    this.texture = null
+    this.mesh.removeFromParent()
+    // mesh.geometry NICHT disposen - THREE.Sprite teilt sich eine globale Geometrie
     this.mesh.material.dispose()
   }
 }

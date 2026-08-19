@@ -41,28 +41,32 @@ export class Game {
   private fps = 0
   private debug = false
   private ctx!: UpdateContext
+  
+  //Avoid memory leaks
+  private rafId = 0;
+  private disposed = false
+  private ac = new AbortController()
 
-  constructor(canvas: HTMLCanvasElement) {
+
+  constructor(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer) {
+    const { signal } = this.ac
+
     this.scene = new THREE.Scene()
 
     this.scene.background = new THREE.Color(COLOR_SKY)
 
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR)
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false })
-    this.renderer.setPixelRatio(window.devicePixelRatio)
-    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    // Der Renderer wird ausserhalb erzeugt und ueberlebt den Retry - ein
+    // zweiter WebGLRenderer auf demselben Canvas wuerde einen weiteren
+    // WebGL-Context belegen, den dispose() nicht freigibt.
+    this.renderer = renderer
 
     this.state = GameState.MENU
 
     this.setupPostProcessing()
 
-    this.input = new InputManager(canvas, () => this.state)
-
-    document.addEventListener('pointerlockchange', () => {
-      const locked = document.pointerLockElement === canvas
-      document.body.classList.toggle('locked', locked)
-    })
+    this.input = new InputManager(canvas, () => this.state, signal, () => this.toggleDebug())
 
     window.addEventListener('resize', () => {
       this.camera.aspect = window.innerWidth / window.innerHeight
@@ -71,7 +75,7 @@ export class Game {
       this.composer.setSize(window.innerWidth, window.innerHeight)
       // Update resolution so that Scanline-density uniform is correct for new window size
       this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
-    })
+    }, {signal})
   }
 
   /*
@@ -130,13 +134,20 @@ export class Game {
 
   }
 
-  start() {
+  async  start() {
     this.init()
     this.lastTime = performance.now()
-    requestAnimationFrame(this.loop)
+
+    await this.player.isReady();
+    //Because it is async it can be that dipsose has already run!! 
+    if (this.disposed) { return }
+
+    this.rafId = requestAnimationFrame(this.loop)
   }
 
   private loop = (now: number) => {
+    if (this.disposed) return
+
     const rawDt = (now - this.lastTime) / 1000
     const dt = Math.min(rawDt, FRAME_DT_CAP)
     this.lastTime = now
@@ -144,7 +155,16 @@ export class Game {
     this.calculateFPS(rawDt)
     this.update(dt)
     this.render()
-    requestAnimationFrame(this.loop)
+    this.rafId = requestAnimationFrame(this.loop)
+  }
+
+  private updateHud() {
+    const health = Math.max(this.player.getHealth(),0)
+    UIRenderer.getInstance().updateHud({
+        fps: this.fps,
+        health: health,
+        debug: this.debug
+    })
   }
 
   private updateHud() {
@@ -228,17 +248,32 @@ export class Game {
   }
 
   public dispose() {
+    if (this.disposed) return
+    this.disposed = true
+
+    this.ac.abort()                    // raeumt auch die InputManager-Listener ab
+    cancelAnimationFrame(this.rafId)   // ← Loop stoppen
+
+    this.enemyFacingDebug?.dispose()
+    this.enemyFacingDebug = undefined
+
+    for (const p of this.projectiles) {
+      this.scene.remove(p.mesh)
+      p.dispose()
+    }
+    this.projectiles.length = 0
+
+    // init() lief evtl. nie (dispose aus dem MENU-State)
+    this.field?.dispose()
+    this.player?.dispose()
+
     this.composer.dispose()
     this.scanlinePass.dispose()
     this.damageFlashPass.dispose()
-    this.renderer.dispose()
+    // this.renderer.dispose() bewusst NICHT - der Renderer gehoert main.ts
 
-    this.field.dispose()
-    this.player.dispose()
-
-    for (const p of this.projectiles) {
-      p.dispose()
-    }
+    this.scene.clear()                 // Lights + Field-Meshes aus init()
+    this.ctx = undefined as unknown as UpdateContext
   }
 }
 
