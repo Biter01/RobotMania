@@ -62,6 +62,7 @@ export class UIRenderer {
         this.listeners[event] = cb
     }
 
+    //UI Event
     private handleClick = (e: MouseEvent): void => {
         const target = e.target as HTMLElement
 
@@ -86,6 +87,9 @@ export class UIRenderer {
         this.uiContainer.innerHTML = this.gameOverOverlay
     }
 
+   
+
+
     private renderMenuScreen(): void {
         this.uiContainer.innerHTML = this.menuScreen
     }
@@ -95,7 +99,6 @@ export class UIRenderer {
         this.fpsEl = document.getElementById('fps') as HTMLElement
         this.healthEl = document.getElementById('health') as HTMLElement
         this.debugEl =  document.getElementById('debug') as HTMLElement
-
     }
 
     public updateHud(hud: HUDElements) {

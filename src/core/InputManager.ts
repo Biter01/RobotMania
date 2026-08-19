@@ -7,33 +7,42 @@ export class InputManager {
   mouseDown = false
   isLocked = false
 
-  constructor(canvas: HTMLCanvasElement, getState: () => GameState) {
+  constructor(canvas: HTMLCanvasElement, getState: () => GameState, signal: AbortSignal, toggleDebug: () => void) {
     window.addEventListener('keydown', e => {
       this.keys[e.code] = true
       if (e.code === 'Escape' && this.isLocked) {
         document.exitPointerLock()
       }
-    })
-    window.addEventListener('keyup', e => { this.keys[e.code] = false })
+    }, { signal })
+
+    window.addEventListener('keyup', e => { this.keys[e.code] = false }, { signal })
 
     canvas.addEventListener('click', () => {
       if (getState() === GameState.PLAYING) {
         canvas.requestPointerLock()
       }
-    })
+    }, { signal })
 
     document.addEventListener('pointerlockchange', () => {
       this.isLocked = document.pointerLockElement === canvas
-    })
+    }, { signal })
 
     document.addEventListener('mousemove', e => {
       if (!this.isLocked) return
       this.mouseX += e.movementX
       this.mouseY += e.movementY
-    })
+    }, { signal })
 
-    canvas.addEventListener('mousedown', e => { if (e.button === 0) this.mouseDown = true })
-    canvas.addEventListener('mouseup',   e => { if (e.button === 0) this.mouseDown = false })
+    canvas.addEventListener('mousedown', e => { if (e.button === 0) this.mouseDown = true }, { signal })
+    canvas.addEventListener('mouseup',   e => { if (e.button === 0) this.mouseDown = false }, { signal })
+    
+    document.addEventListener('keydown', (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Tab') {
+          keyboardEvent.preventDefault(); // wichtig, siehe unten
+          toggleDebug();
+          // z. B. game.toggleSomething();
+      }
+    }, {signal})
   }
 
   consumeMouse(): { dx: number; dy: number } {
