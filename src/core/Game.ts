@@ -6,7 +6,6 @@ import { InputManager } from './InputManager'
 import { Player } from '../entities/Player'
 import { Projectile } from '../entities/Projectile'
 import { GameField } from '../world/GameField'
-
 import { ScanlineShader } from '../shaders/ScanlineShader'
 import { DamageFlashShader } from '../shaders/DamageFlashShader'
 
@@ -23,10 +22,10 @@ export const FRAME_DT_CAP = 0.05
 
 
 export class Game {
-  scene: THREE.Scene
-  camera: THREE.PerspectiveCamera
+  scene!: THREE.Scene
+  camera!: THREE.PerspectiveCamera
   renderer: THREE.WebGLRenderer
-  input: InputManager
+  input!: InputManager 
   state: GameState
 
   private composer!: EffectComposer
@@ -49,34 +48,78 @@ export class Game {
 
 
   constructor(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer) {
-    const { signal } = this.ac
-
-    this.scene = new THREE.Scene()
-
-    this.scene.background = new THREE.Color(COLOR_SKY)
-
-    this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR)
-
-    // Der Renderer wird ausserhalb erzeugt und ueberlebt den Retry - ein
-    // zweiter WebGLRenderer auf demselben Canvas wuerde einen weiteren
-    // WebGL-Context belegen, den dispose() nicht freigibt.
     this.renderer = renderer
-
     this.state = GameState.MENU
 
-    this.setupPostProcessing()
-
-    this.input = new InputManager(canvas, () => this.state, signal, () => this.toggleDebug())
-
-    window.addEventListener('resize', () => {
-      this.camera.aspect = window.innerWidth / window.innerHeight
-      this.camera.updateProjectionMatrix()
-      this.renderer.setSize(window.innerWidth, window.innerHeight)
-      this.composer.setSize(window.innerWidth, window.innerHeight)
-      // Update resolution so that Scanline-density uniform is correct for new window size
-      this.scanlinePass.uniforms.resolution.value = window.innerHeight * window.devicePixelRatio
-    }, {signal})
+    this.setupScene()
+    this.setupCamera()
+    this.setupLights()
+    this.setupPostProcessing()   // existiert schon
+    this.setupInput(canvas)
+    this.setupResizeHandler()
   }
+
+  private setupScene(): void {
+    this.scene = new THREE.Scene()
+    this.scene.background = new THREE.Color(COLOR_SKY)
+  }
+
+  private setupCamera(): void {
+    this.camera = new THREE.PerspectiveCamera(
+      CAMERA_FOV, window.innerWidth / window.innerHeight, CAMERA_NEAR, CAMERA_FAR,
+    )
+    this.scene.add(this.camera)
+  }
+
+  private setupLights(): void {
+    this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
+    const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
+    dir.position.set(5, 10, 5)
+    this.scene.add(dir)
+  }
+
+  private setupInput(canvas: HTMLCanvasElement): void {
+    this.input = new InputManager(
+      canvas, () => this.state, this.ac.signal, () => this.toggleDebug(),
+    )
+  }
+
+private setupResizeHandler(): void {
+  window.addEventListener('resize', () => {
+    this.camera.aspect = window.innerWidth / window.innerHeight
+    this.camera.updateProjectionMatrix()
+    this.renderer.setSize(window.innerWidth, window.innerHeight)
+    this.composer.setSize(window.innerWidth, window.innerHeight)
+    this.scanlinePass.uniforms.resolution.value =
+      window.innerHeight * window.devicePixelRatio
+  }, { signal: this.ac.signal })
+}
+
+private setupWorld(level: string[]): void {
+  this.field = new GameField(level)
+  this.field.render(this.scene)
+}
+
+private setupPlayer(): void {
+  this.player = new Player(
+    this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z,
+  )
+  this.player.setDamageShader(this.damageFlashPass)
+}
+
+private createContext(): UpdateContext {
+  return {
+    dt: 0,
+    input: this.input,
+    camera: this.camera,
+    field: this.field,
+    player: this.player,
+    spawnProjectile: (p: Projectile) => {
+      this.projectiles.push(p)
+      this.scene.add(p.mesh)
+    },
+  }
+}
 
   /*
     This class RenderPass represents a render pass. 
@@ -106,43 +149,25 @@ export class Game {
     }
   }
 
-  init() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, AMBIENT_INTENSITY))
-    const dir = new THREE.DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
-    dir.position.set(5, 10, 5)
-    this.scene.add(dir)
-    this.scene.add(this.camera)
 
-    this.field = GameField.getInstance()
-    this.field.render(this.scene)
-
-    this.player = new Player(this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z)
-    this.player.setDamageShader(this.damageFlashPass)
-    
-    this.ctx = {
-      dt: 0,
-      input: this.input,
-      camera: this.camera,
-      colliders: this.field.colliders,
-      enemies: this.field.enemies,
-      player: this.player,
-      spawnProjectile: (p: Projectile) => {
-        this.projectiles.push(p)
-        this.scene.add(p.mesh)
-      }
-    }
-
+  async start(level: string[]) {
+    await this.loadLevel(level)
+    if (this.disposed) return
+    this.lastTime = performance.now()
+    this.rafId = requestAnimationFrame(this.loop)
   }
 
-  async  start() {
-    this.init()
-    this.lastTime = performance.now()
+  async loadLevel(level: string[]) {
+    this.disposeWorld()
+    this.setupWorld(level)
+    this.setupPlayer()
+    this.ctx = this.createContext()
 
-    await this.player.isReady();
-    //Because it is async it can be that dipsose has already run!! 
-    if (this.disposed) { return }
+    // disposeWorld() hat die Debug-Pfeile mitgenommen - bei aktivem Debug neu
+    // aufbauen, damit der Tab-Toggle nach einem Retry nicht aus dem Tritt geraet.
+    if (this.debug) this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
 
-    this.rafId = requestAnimationFrame(this.loop)
+    await this.player.isReady()
   }
 
   private loop = (now: number) => {
@@ -163,6 +188,7 @@ export class Game {
     UIRenderer.getInstance().updateHud({
         fps: this.fps,
         health: health,
+        enemieCount: this.field.enemies.length,
         debug: this.debug
     })
   }
@@ -238,6 +264,26 @@ export class Game {
     this.projectiles = this.projectiles.filter(p => p.alive)
   }
 
+  // Alles, was zu EINEM Level gehoert. Laeuft bei jedem Retry - der rAF-Loop
+  // und die Game-Lifetime-Objekte (Composer, Input) bleiben dabei bestehen.
+  private disposeWorld(): void {
+    for (const p of this.projectiles) {
+      this.scene.remove(p.mesh)
+      p.dispose()
+    }
+    this.projectiles.length = 0
+
+    // Die Map<Enemy, ArrowHelper> haelt sonst Referenzen auf disposte Enemies.
+    this.enemyFacingDebug?.dispose()
+    this.enemyFacingDebug = undefined
+
+    // init() lief evtl. nie (dispose aus dem MENU-State)
+    this.field?.dispose()
+    this.player?.dispose()
+
+    this.ctx = undefined as unknown as UpdateContext
+  }
+
   public dispose() {
     if (this.disposed) return
     this.disposed = true
@@ -245,26 +291,13 @@ export class Game {
     this.ac.abort()                    // raeumt auch die InputManager-Listener ab
     cancelAnimationFrame(this.rafId)   // ← Loop stoppen
 
-    this.enemyFacingDebug?.dispose()
-    this.enemyFacingDebug = undefined
-
-    for (const p of this.projectiles) {
-      this.scene.remove(p.mesh)
-      p.dispose()
-    }
-    this.projectiles.length = 0
-
-    // init() lief evtl. nie (dispose aus dem MENU-State)
-    this.field?.dispose()
-    this.player?.dispose()
+    this.disposeWorld()
 
     this.composer.dispose()
     this.scanlinePass.dispose()
     this.damageFlashPass.dispose()
     // this.renderer.dispose() bewusst NICHT - der Renderer gehoert main.ts
 
-    this.scene.clear()                 // Lights + Field-Meshes aus init()
-    this.ctx = undefined as unknown as UpdateContext
+    this.scene.clear()                 // Lights + Kamera aus dem Setup
   }
 }
-

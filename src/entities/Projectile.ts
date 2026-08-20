@@ -167,7 +167,7 @@ export class Projectile implements Entity {
     }
 
 
-    for (const box of ctx.colliders) {
+    for (const box of ctx.field.colliders) {
       if (segmentHitsBox(proGeo, box)) {
         this.alive = false
         return
@@ -176,7 +176,7 @@ export class Projectile implements Entity {
 
 
     if(this.group == DamageGroup.Enemy) {
-        for (const enemy of ctx.enemies) {
+        for (const enemy of ctx.field.enemies) {
           if (!enemy.isAlive) continue
           if (this.enemyIsHit(proGeo,enemy)) {
             enemy.takeDamage(this.damage)

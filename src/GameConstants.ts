@@ -1,4 +1,3 @@
-import { LEVEL_2 } from "./world/MapData"
 
 // World / playfield
 export const TILE_SIZE           = 2
@@ -37,6 +36,3 @@ export const PROJECTILE_SPEED    = 200
 // Enemy
 export const ENEMY_HP            = 100
 export const ENEMY_RADIUS        = 0.3
-
-//Levels
-export const CURRENT_LEVEL = LEVEL_2

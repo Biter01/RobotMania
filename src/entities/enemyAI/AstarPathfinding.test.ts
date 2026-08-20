@@ -1,27 +1,23 @@
 import * as THREE from 'three'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { TILE_SIZE } from '../../GameConstants'
 import { LEVEL_2 } from '../../world/MapData'
 import { parseMap } from '../../world/Map'
+import type { GameField } from '../../world/GameField'
+import { AstarPathfinding } from './AstarPathfinding'
 
 /**
- * Walkability seam. The real GameField singleton cannot be constructed in Node:
- * its ctor builds THREE geometry and `new Enemy(...)`, which calls
- * loadPixelTexture() -> DOM TextureLoader. It also has a private static instance
- * with no reset method. Factory-mocking the whole module keeps the real
+ * Walkability seam. The real GameField cannot be constructed in Node: its ctor
+ * builds THREE geometry and `new Enemy(...)`, which calls loadPixelTexture() ->
+ * DOM TextureLoader. findPath takes the field as a parameter, so a stub with
+ * just isTileWalkable is enough, and `import type` keeps the real
  * GameField -> Enemy -> AssetLoader graph from ever loading.
  */
 let isWalkableImpl: (x: number, z: number) => boolean = (): boolean => true
 
-vi.mock('../../world/GameField', () => ({
-  GameField: {
-    getInstance: (): { isTileWalkable: (x: number, z: number) => boolean } => ({
-      isTileWalkable: (x: number, z: number): boolean => isWalkableImpl(x, z),
-    }),
-  },
-}))
-
-import { AstarPathfinding } from './AstarPathfinding'
+const gameField: GameField = {
+  isTileWalkable: (x: number, z: number): boolean => isWalkableImpl(x, z),
+} as unknown as GameField
 
 // ---------------------------------------------------------------------------
 // Fixtures & helpers
@@ -184,7 +180,8 @@ describe('coordinate contract', () => {
   it('takes world coordinates in and returns grid tiles out', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(3, 1)
+      worldCentre(3, 1),
+      gameField
     )
 
     expect([path[0].x, path[0].y]).toEqual([1, 1])
@@ -196,7 +193,8 @@ describe('coordinate contract', () => {
   it('path[0] is the start tile, not the first step', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(2, 2),
-      worldCentre(5, 2)
+      worldCentre(5, 2),
+      gameField
     )
     expect([path[0].x, path[0].y]).toEqual([2, 2])
   })
@@ -207,14 +205,16 @@ describe('coordinate contract', () => {
     // TILE_SIZE is 2: world x = 4.0 is the first world unit of tile 2 ...
     const onBoundary: THREE.Vector2[] = finder.findPath(
       new THREE.Vector2(4.0, 1),
-      worldCentre(6, 0)
+      worldCentre(6, 0),
+      gameField
     )
     expect(onBoundary[0].x).toBe(2)
 
     // ... and world x = 3.999 is still tile 1.
     const belowBoundary: THREE.Vector2[] = finder.findPath(
       new THREE.Vector2(3.999, 1),
-      worldCentre(6, 0)
+      worldCentre(6, 0),
+      gameField
     )
     expect(belowBoundary[0].x).toBe(1)
   })
@@ -223,7 +223,8 @@ describe('coordinate contract', () => {
     // floor(-0.5 / 2) === -1, whereas truncation would give 0.
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       new THREE.Vector2(-0.5, -0.5),
-      worldCentre(1, 1)
+      worldCentre(1, 1),
+      gameField
     )
     expect([path[0].x, path[0].y]).toEqual([-1, -1])
   })
@@ -233,7 +234,8 @@ describe('trivial cases', () => {
   it('returns a single-tile path when start and goal are the same tile', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(4, 4),
-      worldCentre(4, 4)
+      worldCentre(4, 4),
+      gameField
     )
     expect(path).toHaveLength(1)
     expect([path[0].x, path[0].y]).toEqual([4, 4])
@@ -243,7 +245,8 @@ describe('trivial cases', () => {
     // Different world coords, same tile.
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       new THREE.Vector2(4.1, 4.1),
-      new THREE.Vector2(5.9, 5.9)
+      new THREE.Vector2(5.9, 5.9),
+      gameField
     )
     expect(path).toHaveLength(1)
     expect([path[0].x, path[0].y]).toEqual([2, 2])
@@ -252,7 +255,8 @@ describe('trivial cases', () => {
   it('returns two tiles for an orthogonally adjacent goal', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(3, 3),
-      worldCentre(4, 3)
+      worldCentre(4, 3),
+      gameField
     )
     expect(path).toHaveLength(2)
     assertValidPath(path, [3, 3], [4, 3])
@@ -261,7 +265,8 @@ describe('trivial cases', () => {
   it('returns two tiles for a diagonally adjacent goal', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(3, 3),
-      worldCentre(4, 4)
+      worldCentre(4, 4),
+      gameField
     )
     expect(path).toHaveLength(2)
     assertValidPath(path, [3, 3], [4, 4])
@@ -278,7 +283,8 @@ describe('open ground', () => {
   it('walks a straight horizontal line in Chebyshev-many steps', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 4),
-      worldCentre(7, 4)
+      worldCentre(7, 4),
+      gameField
     )
     assertValidPath(path, [0, 4], [7, 4])
     expect(path.length - 1).toBe(7)
@@ -287,7 +293,8 @@ describe('open ground', () => {
   it('walks a straight vertical line in Chebyshev-many steps', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(4, 0),
-      worldCentre(4, 6)
+      worldCentre(4, 6),
+      gameField
     )
     assertValidPath(path, [4, 0], [4, 6])
     expect(path.length - 1).toBe(6)
@@ -296,7 +303,8 @@ describe('open ground', () => {
   it('walks a pure diagonal rather than stepping around it', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 0),
-      worldCentre(6, 6)
+      worldCentre(6, 6),
+      gameField
     )
     assertValidPath(path, [0, 0], [6, 6])
     expect(path.length - 1).toBe(6)
@@ -307,7 +315,7 @@ describe('open ground', () => {
 
     for (let gx = 0; gx < 10; gx++) {
       for (let gy = 0; gy < 10; gy++) {
-        const path: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(gx, gy))
+        const path: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(gx, gy), gameField)
         assertValidPath(path, [0, 0], [gx, gy])
         expect(path.length - 1).toBe(Math.max(gx, gy))
       }
@@ -329,7 +337,8 @@ describe('walls', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 0),
-      worldCentre(9, 0)
+      worldCentre(9, 0),
+      gameField
     )
 
     assertValidPath(path, [1, 0], [9, 0])
@@ -352,7 +361,8 @@ describe('walls', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 0),
-      worldCentre(8, 6)
+      worldCentre(8, 6),
+      gameField
     )
 
     assertValidPath(path, [0, 0], [8, 6])
@@ -375,7 +385,8 @@ describe('walls', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(3, 3)
+      worldCentre(3, 3),
+      gameField
     )
     assertValidPath(path, [1, 1], [3, 3])
   })
@@ -395,7 +406,8 @@ describe('no path', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(5, 5)
+      worldCentre(5, 5),
+      gameField
     )
     expect(path).toEqual([])
   })
@@ -413,7 +425,8 @@ describe('no path', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(4, 2)
+      worldCentre(4, 2),
+      gameField
     )
     expect(path).toEqual([])
   })
@@ -432,7 +445,8 @@ describe('no path', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(4, 3)
+      worldCentre(4, 3),
+      gameField
     )
 
     expect(path.length).toBeGreaterThan(0)
@@ -456,8 +470,8 @@ describe('statelessness across calls', () => {
     ])
 
     const finder: AstarPathfinding = new AstarPathfinding()
-    const first: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4))
-    const second: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4))
+    const first: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4), gameField)
+    const second: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4), gameField)
 
     expect(tuples(second)).toEqual(tuples(first))
   })
@@ -472,47 +486,11 @@ describe('statelessness across calls', () => {
     ])
 
     const finder: AstarPathfinding = new AstarPathfinding()
-    const routeA: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4))
-    finder.findPath(worldCentre(8, 0), worldCentre(0, 4))
-    const routeAgain: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4))
+    const routeA: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4), gameField)
+    finder.findPath(worldCentre(8, 0), worldCentre(0, 4), gameField)
+    const routeAgain: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4), gameField)
 
     expect(tuples(routeAgain)).toEqual(tuples(routeA))
-  })
-})
-
-describe('findNextTile', () => {
-  it('returns the second tile of the path', () => {
-    useGrid(Array.from({ length: 6 }, (): string => '......'))
-
-    const finder: AstarPathfinding = new AstarPathfinding()
-    const path: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(5, 5))
-    const next: THREE.Vector2 = finder.findNextTile(worldCentre(0, 0), worldCentre(5, 5))
-
-    expect([next.x, next.y]).toEqual([path[1].x, path[1].y])
-  })
-
-  it('falls back to the own tile when start and goal are the same', () => {
-    const next: THREE.Vector2 = new AstarPathfinding().findNextTile(
-      worldCentre(3, 3),
-      worldCentre(3, 3)
-    )
-    expect([next.x, next.y]).toEqual([3, 3])
-  })
-
-  it('falls back to the own tile when the goal is unreachable', () => {
-    useGrid([
-      '#########',
-      '#.......#',
-      '#########',
-      '#.......#',
-      '#########',
-    ])
-
-    const next: THREE.Vector2 = new AstarPathfinding().findNextTile(
-      worldCentre(1, 1),
-      worldCentre(5, 3)
-    )
-    expect([next.x, next.y]).toEqual([1, 1])
   })
 })
 
@@ -530,7 +508,8 @@ describe('performance and termination on LEVEL_2', () => {
     const began: number = performance.now()
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(...start),
-      worldCentre(...goal)
+      worldCentre(...goal),
+      gameField
     )
     const elapsed: number = performance.now() - began
 
@@ -543,7 +522,8 @@ describe('performance and termination on LEVEL_2', () => {
     // EnemyAI.ts:98 re-runs exactly this every frame while path.length === 0.
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(-5, -5) // outside the map, so never in the walkable set
+      worldCentre(-5, -5), // outside the map, so never in the walkable set
+      gameField
     )
     expect(path).toEqual([])
   })
@@ -579,7 +559,8 @@ describe('optimality under octile costs', () => {
   it('returns a path that is valid and connected', () => {
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 0),
-      worldCentre(5, 5)
+      worldCentre(5, 5),
+      gameField
     )
     // This must keep holding whatever the cost model becomes.
     assertValidPath(path, [0, 0], [5, 5])
@@ -590,7 +571,8 @@ describe('optimality under octile costs', () => {
     // green even for a badly chosen heuristic); a detour is what exposes it.
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 0),
-      worldCentre(5, 5)
+      worldCentre(5, 5),
+      gameField
     )
     expect(pathCost(path)).toBeCloseTo(optimalCost([0, 0], [5, 5], isWalkableImpl), 9)
   })
@@ -622,7 +604,8 @@ describe('optimality under octile costs', () => {
 
       const path: THREE.Vector2[] = new AstarPathfinding().findPath(
         worldCentre(0, 0),
-        worldCentre(...goal)
+        worldCentre(...goal),
+        gameField
       )
       const actual: number = pathCost(path)
       if (Math.abs(actual - optimal) > 1e-9) {
@@ -666,7 +649,8 @@ describe('no diagonal corner cutting', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(0, 0),
-      worldCentre(1, 1)
+      worldCentre(1, 1),
+      gameField
     )
 
     expect(path).toEqual([])
@@ -684,7 +668,8 @@ describe('no diagonal corner cutting', () => {
 
     const path: THREE.Vector2[] = new AstarPathfinding().findPath(
       worldCentre(1, 1),
-      worldCentre(2, 2)
+      worldCentre(2, 2),
+      gameField
     )
 
     assertValidPath(path, [1, 1], [2, 2])

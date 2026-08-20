@@ -2,7 +2,7 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ColliderBox } from '../types'
 import { Enemy } from '../entities/Enemy'
-import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK, CURRENT_LEVEL } from '../GameConstants'
+import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK } from '../GameConstants'
 import { parseMap } from './Map'
 import { ParsedMap } from '../types'
 
@@ -18,15 +18,12 @@ export class GameField {
   private parsed: ParsedMap
   private walkableSet: Set<string>
 
-  private static instance: GameField | null = null
-
-
-  private constructor() {
-    this.parsed = parseMap(CURRENT_LEVEL, TILE_SIZE)
+  public constructor(current_level: string[]) {
+    this.parsed = parseMap(current_level, TILE_SIZE)
     this.playerSpawn = this.parsed.playerSpawn
     this.walkableSet = new Set(this.parsed.walkableTiles.map(t => `${t.x},${t.z}`))
 
-    this.tileMap = CURRENT_LEVEL
+    this.tileMap = current_level
     this.meshes.push(this.buildFloor())
     this.meshes.push(this.buildWallBlocks())
     this.buildEnemies()
@@ -34,13 +31,6 @@ export class GameField {
     for (const mesh of this.meshes) {
       mesh.matrixAutoUpdate = false
     }
-  }
-
-  static getInstance(): GameField {
-    if (!GameField.instance) {
-      GameField.instance = new GameField()
-    }
-    return GameField.instance
   }
 
   render(scene: THREE.Scene) {
@@ -90,8 +80,10 @@ export class GameField {
   }
 
   public dispose() {
-    GameField.instance = null
     for (const mesh of this.meshes) {
+      // Erst abhaengen: eine disposte Geometry, die noch in der Scene haengt,
+      // wird beim naechsten render() neu registriert und neu hochgeladen.
+      mesh.removeFromParent()
       mesh.geometry.dispose()
       ;(mesh.material as THREE.Material).dispose()
     }
@@ -100,7 +92,7 @@ export class GameField {
       enemie.dispose();
     }
 
-    // Arrays leeren - sie werden ueber Game.ctx (colliders/enemies) aliased
+    // Arrays leeren - Game.ctx.field zeigt auf diese Instanz
     this.meshes.length = 0
     this.colliders.length = 0
     this.enemies.length = 0

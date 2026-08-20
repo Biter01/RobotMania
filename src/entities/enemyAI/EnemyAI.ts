@@ -31,22 +31,22 @@ export class EnemyAI {
         this.enemy = enemy;
     }
 
-    public update(dt:number,playerPos: THREE.Vector3, colliders: ColliderBox[]): void {
+    public update(dt:number,playerPos: THREE.Vector3, gameField:GameField): void {
         if (!this.enemy.sm) return;
 
         const inAttackRange = this.isPlayerInAttackRange(this.enemy.position, playerPos);
         const inSight = this.isPlayerInSight(this.enemy.position, playerPos);
 
         if (inAttackRange) {
-            this.attackBehaviour(playerPos, dt, colliders);
+            this.attackBehaviour(playerPos, dt, gameField.colliders);
         } else if (inSight) {
-            this.followBehaviour(playerPos, dt)
+            this.followBehaviour(playerPos, dt,gameField)
         } else {
             //Idle Behaviour
             this.enemy.setActivity('idle');
         }
 
-        this.resolveSeparation();
+        this.resolveSeparation(gameField.enemies);
     }
 
     private attackBehaviour(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
@@ -64,16 +64,16 @@ export class EnemyAI {
         }
     }
 
-    private followBehaviour(playerPos: THREE.Vector3,dt: number): void {
+    private followBehaviour(playerPos: THREE.Vector3,dt: number, gameField:GameField): void {
         this.enemy.setActivity('walk');
-        this.stepTowardsPlayer(dt, playerPos);
+        this.stepTowardsPlayer(dt, playerPos, gameField);
     }
 
 
-    private resolveSeparation(): void {
+    private resolveSeparation(enemies: Enemy[]): void {
         const minDist = ENEMY_RADIUS;
 
-        for (const other of GameField.getInstance().enemies) {
+        for (const other of enemies) {
             if (other === this.enemy || !other.isAlive()) continue;
 
             const dx = this.enemy.position.x - other.position.x;
@@ -98,10 +98,10 @@ export class EnemyAI {
         }
     }
     
-     private stepTowardsPlayer(dt: number, playerPos: THREE.Vector3): void {
+     private stepTowardsPlayer(dt: number, playerPos: THREE.Vector3, gameField:GameField): void {
         this.replanTimer -= dt;
         if (this.replanTimer <= 0 || this.path.length === 0) {
-            this.recomputePath(playerPos);          
+            this.recomputePath(playerPos, gameField);          
             this.replanTimer = this.replanInterval;
         }
         //Just follow
@@ -151,10 +151,10 @@ export class EnemyAI {
 
     }
 
-    private recomputePath(playerPos: THREE.Vector3): void {
+    private recomputePath(playerPos: THREE.Vector3, gameField: GameField): void {
         const enemy2D  = new THREE.Vector2(this.enemy.position.x, this.enemy.position.z);
         const player2D = new THREE.Vector2(playerPos.x, playerPos.z);
-        this.path = this.pathFinder.findPath(enemy2D, player2D);
+        this.path = this.pathFinder.findPath(enemy2D, player2D, gameField);
         this.pathIndex = this.path.length > 1 ? 1 : 0;  // Index 0 ist das eigene Feld
     }
 

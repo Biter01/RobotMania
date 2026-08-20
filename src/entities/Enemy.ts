@@ -192,7 +192,7 @@ export class Enemy implements Entity, Damageable {
 
   public update(dt: number, ctx: UpdateContext): void {
 
-    this.enemyAI.update(dt, ctx.player.position, ctx.colliders);
+    this.enemyAI.update(dt, ctx.player.position, ctx.field);
     this.updateEnemyState(dt, ctx.player.position)
     this.mesh.position.copy(this.position)
 
