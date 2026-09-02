@@ -5,7 +5,7 @@ import { UIRenderer } from './ui/UIRenderer'
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
 
-import { LEVEL_1,LEVEL_2,EXTREM, EXTREM2 } from "./world/MapData"
+import {LEVEL_2 } from "./world/MapData"
 
 // Genau EIN WebGL-Context fuer die gesamte Session. renderer.dispose() gibt den
 // Context nicht frei, ein Renderer pro Game wuerde sie also aufstauen.
@@ -13,7 +13,7 @@ const renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ canvas, antialia
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(window.innerWidth, window.innerHeight)
 
-let currLevel = EXTREM2
+let currLevel = LEVEL_2
 
 let game: Game = new Game(canvas, renderer)
 
