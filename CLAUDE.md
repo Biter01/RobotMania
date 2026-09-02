@@ -30,43 +30,44 @@ src/
 │   ├── InputManager.ts  # Tastatur + Maus Input
 │   └── AssetLoader.ts   # Texturen & Sprite-Sheets laden
 ├── world/
-│   ├── Map.ts           # Level-Grid → 3D-Geometrie
-│   ├── MapData.ts       # Level-Daten als 2D-Array
-│   └── SkyBox.ts        # Pixelart-Himmel / Decke
+│   ├── Map.ts           # parseMap: ASCII-Level → Wände/Spawns/Walkables
+│   ├── MapData.ts       # Level-Daten als string[] (LEVEL_1, LEVEL_2, EXTREM, EXTREM2)
+│   ├── WallTiles.ts     # Registry: Map-Zeichen → Wand-Textur
+│   └── GameField.ts     # Baut Boden-, Wand- und Gegner-Objekte der Szene
 ├── entities/
 │   ├── Player.ts        # Bewegung, Kamera, Gesundheit
-│   ├── Enemy.ts         # AI, Billboard-Sprite, Animation
-│   └── Pickup.ts        # Items als Billboard-Sprite
-├── sprites/
-│   ├── BillboardSprite.ts  # PlaneGeometry immer zur Kamera ausgerichtet
-│   └── AnimatedSprite.ts   # Sprite-Sheet-Animation (UV-Offset, Frame-Timer)
+│   ├── Enemy.ts         # AI, Sprite-Animation
+│   ├── Entity.ts        # Gemeinsame Basis
+│   ├── Projectile.ts    # Geschosse
+│   └── enemyAI/         # EnemyAI, A*-Pathfinding, Facing-Debug
+├── states/              # StateMachine + Enemy-Animations-States
+├── shaders/             # ScanlineShader, DamageFlashShader (Post-Processing)
 ├── weapons/
 │   ├── Weapon.ts        # Basis-Klasse
 │   └── Pistol.ts        # Pistole (Pixelart-Sprite im HUD)
 ├── ui/
-│   ├── HUD.ts           # HP-Bar, Ammo, Face-Sprite
-│   └── MenuScreen.ts    # Start- und Game-Over-Screen
+│   └── UIRenderer.ts    # HUD + Menü-/Game-Over-Screens
 └── utils/
-    ├── Raycaster.ts     # Kollisionserkennung
     └── MathUtils.ts     # Hilfsfunktionen
 ```
 
 Assets:
 ```
 public/sprites/
-├── enemies/   # demon_idle/walk/attack/dead.png (32×32, Spritesheet horizontal)
-├── weapons/   # pistol_idle/fire.png (64×64)
-├── pickups/   # medpack/ammo.png (16×16)
-├── hud/       # face_normal/hurt/dead.png (24×24)
-└── tiles/     # wall_stone/brick, floor, ceiling (64×64)
+├── enemies/   # RoboOrginalNew.png (Spritesheet horizontal, 102 Frames × 128px)
+├── weapons/   # waffe2.png
+└── tiles/     # BrickWall.png (Wand-Textur, via WallTiles.ts registriert)
 ```
 
 ## Code Conventions
 
-- **Pixel-Rendering:** `NearestFilter` auf alle Texturen, `antialias: false`, `pixelRatio = 1`, interne Auflösung 320×200 + CSS `image-rendering: pixelated`
-- **Sprites:** `alphaTest = 0.5` für PNG-Transparenz; Billboard-Sprites via `lookAt(camera.position)`
+- **Pixel-Rendering:** `magFilter = NearestFilter` auf alle Texturen, `antialias: false`, CSS `image-rendering: pixelated`
+- **Texturen laden:** immer über `loadPixelTexture()` (`core/AssetLoader.ts`) – cached, klont pro Instanz. Welt-Geometrie (Wand-Tiles) nutzt `{ mipmaps: true }` gegen Flimmern auf Distanz; Sprites/HUD bleiben ohne Mipmaps.
+- **Sprites:** `alphaTest = 0.5` für PNG-Transparenz
 - **Sprite-Animation:** UV-Offset (`texture.offset.x`, `texture.repeat.x`) statt Spritesheet-Slicing
-- **Level-Format:** 2D-Zahlen-Array (`0` = Boden, `1` = Wand, `2` = Spieler-Spawn, `3` = Gegner-Spawn)
+- **Level-Format:** `string[]`, eine Zeile pro Grid-Reihe – `.` = Boden, `P` = Spieler-Spawn, `E` = Gegner-Spawn, `#` = Wand
+- **Wand-Tiles:** Wände werden **nicht** auf `#` hartkodiert. `world/WallTiles.ts` mappt Map-Zeichen → Textur; jedes registrierte Zeichen wird automatisch solide, nicht begehbar und bekommt ein eigenes gemergtes Mesh. Neuer Wandtyp = ein Registry-Eintrag, kein weiterer Code.
+- **Asset-Lifecycle:** Texturen gehören dem Erzeuger – im `.then()` auf `this.disposed` prüfen und in `dispose()` explizit freigeben (Materials geben ihre `map` nicht mit frei).
 - **Gegner-AI:** `idle → chase (dist < 10) → attack (dist < 1.5)`; gleiche AABB-Kollision wie Spieler
 - Kein Anti-Aliasing, kein Weichzeichnen – bewusster Retro-Look
 - TypeScript Typen immer explizit schreiben!

@@ -6,6 +6,7 @@ type UIEventName = 'start' | 'retry'
 export interface HUDElements {
     health: number
     fps: number
+    enemieCount: number
     debug: boolean
 }
 
@@ -40,6 +41,12 @@ export class UIRenderer {
             <span id="health"></span>
         </div>
     `
+
+    private loadingOverlay: string = `
+        <div id="loading-overlay">
+            <h1>LOADING</h1>
+            <p>[ PREPARING SYSTEMS ]</p>
+        </div>` 
 
     private static instance: null | UIRenderer
 
@@ -80,6 +87,8 @@ export class UIRenderer {
             this.renderMenuScreen()
         } else if (state === GameState.PLAYING) {
             this.renderHud()
+        } else if(state == GameState.LOADING) {
+            this.renderLoading()
         }
     }
 
@@ -87,8 +96,9 @@ export class UIRenderer {
         this.uiContainer.innerHTML = this.gameOverOverlay
     }
 
-   
-
+    private renderLoading(): void {
+        this.uiContainer.innerHTML = this.loadingOverlay
+    }
 
     private renderMenuScreen(): void {
         this.uiContainer.innerHTML = this.menuScreen
@@ -104,7 +114,17 @@ export class UIRenderer {
     public updateHud(hud: HUDElements) {
         this.fpsEl!.textContent = `FPS: ${Math.round(hud.fps)}`
         this.healthEl!.textContent = hud.debug ? `INVINCIBLE`: `Health: ${hud.health}`;
-        this.debugEl!.textContent = hud.debug ? 'DEBUG: ENEMY FACING ON' : ''
+        this.debugEl!.textContent = hud.debug ? `DEBUG: ENEMY FACING ON \n 
+                                                ${hud.enemieCount}` : ''
+
+        if(hud.debug) {
+            this.debugEl!.innerHTML = `
+            <div>DEBUG: ENEMY FACING ON</div>
+            <div>Enemy Count: ${hud.enemieCount}</div>
+            `
+        } else {
+            this.debugEl!.innerHTML = ''
+        }
     }
 }
 

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pixel Art Shooter</title>
     <style>
-      * {
+        * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
@@ -50,7 +50,8 @@
         color: #fff;
         text-shadow: 1px 1px 2px #000;
       }
-      #menu-overlay {
+      #menu-overlay,
+      #loading-overlay {
         position: fixed;
         inset: 0;
         display: flex;
@@ -63,7 +64,8 @@
         z-index: 100;
       }
 
-      #menu-overlay h1 {
+      #menu-overlay h1,
+      #loading-overlay h1 {
         font-size: 3rem;
         letter-spacing: 8px;
         color: #e00;
@@ -72,7 +74,8 @@
         image-rendering: pixelated;
       }
 
-      #menu-overlay p {
+      #menu-overlay p,
+      #loading-overlay p {
         font-size: 1rem;
         letter-spacing: 2px;
         animation: blink 1s step-end infinite;

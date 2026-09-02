@@ -192,7 +192,7 @@ export class Enemy implements Entity, Damageable {
 
   public update(dt: number, ctx: UpdateContext): void {
 
-    this.enemyAI.update(dt, ctx.player.position, ctx.colliders);
+    this.enemyAI.update(dt, ctx.player.position, ctx.field);
     this.updateEnemyState(dt, ctx.player.position)
     this.mesh.position.copy(this.position)
 
@@ -217,7 +217,7 @@ export class Enemy implements Entity, Damageable {
       //toPlayer.y = 0
       toPlayer.normalize()
 
-      const size = new THREE.Vector2(3, 3)
+      const size = new THREE.Vector2(4, 4)
 
       const projectile = new Projectile({
         size,

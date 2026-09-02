@@ -1,8 +1,8 @@
-import { Enemy } from "./entities/Enemy"
 import { InputManager } from "./core/InputManager"
 import * as THREE from 'three'
 import { Projectile } from "./entities/Projectile"
 import { Player } from "./entities/Player"
+import { GameField } from "./world/GameField"
 
 
 export interface ColliderBox {
@@ -13,7 +13,8 @@ export interface ColliderBox {
 }
 
 export interface ParsedMap {
-  walls: Array<{ x: number; z: number }>
+  // tile = das Map-Zeichen, ueber das der Wandtyp in WALL_TILES nachgeschlagen wird
+  walls: Array<{ x: number; z: number; tile: string }>
   playerSpawn: { x: number; z: number }
   enemySpawns: Array<{ x: number; z: number }>
   rows: number
@@ -31,14 +32,14 @@ export enum GameState {
   PLAYING = 'PLAYING',
   GAMEOVER = 'GAMEOVER',
   WIN = 'WIN',
+  LOADING = 'LOADING'
 }
 
 export interface UpdateContext {
   dt: number
   input: InputManager
   camera: THREE.PerspectiveCamera
-  colliders: ColliderBox[]
-  enemies: Enemy[]
+  field: GameField
   player: Player
   spawnProjectile: (p: Projectile) => void 
 }

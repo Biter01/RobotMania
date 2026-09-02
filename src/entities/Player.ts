@@ -39,7 +39,7 @@ export class Player implements Entity, Damageable {
 
   update(dt: number, ctx: UpdateContext) {
     this.handleLook(ctx.input)
-    this.handleMove(dt, ctx.input, ctx.colliders)
+    this.handleMove(dt, ctx.input, ctx.field.colliders)
     this.updateWeapon(dt, ctx)
 
     this.updateDamageShader(dt)

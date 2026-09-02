@@ -43,29 +43,15 @@ export class AstarPathfinding {
         ];
 
 
+    private gameField!: GameField;
     private heap: AstarNode[] = [];
 
-    public findPath(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2[] {
+    public findPath(enemyPos: THREE.Vector2, playerPos: THREE.Vector2, gameField: GameField): THREE.Vector2[] {
+        this.gameField = gameField
         this.heap = [];
         return this.findOptimalWay(enemyPos, playerPos);   // ganzer Weg statt nur [1]
     }
 
-
-    public findNextTile(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2{
-        this.heap = [];
-        
-
-        // Implement A* pathfinding algorithm here to find the next tile towards the player
-        // For simplicity, let's return a dummy value for now
-        const optimalWay: THREE.Vector2[]= this.findOptimalWay(enemyPos, playerPos);
-
-        if(optimalWay[1]) {
-            return optimalWay[1];
-        } 
-
-        return this.toTileCoordinates(enemyPos);
-        //return optimalWay.nextTile;
-    }
 
     private findOptimalWay(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2[] {
         
@@ -149,7 +135,7 @@ export class AstarPathfinding {
         // Implement logic to check if the tile is walkable (not a wall or obstacle)
         // For now, let's assume all tiles are valid
         
-        return GameField.getInstance().isTileWalkable(tilePos.x, tilePos.y);
+        return this.gameField.isTileWalkable(tilePos.x, tilePos.y);
 
     }
 
