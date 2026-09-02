@@ -17,6 +17,7 @@ import {
 } from '../GameConstants'
 import { GameState, UpdateContext } from '../types'
 import { UIRenderer } from '../ui/UIRenderer'
+import { setMaxAnisotropy } from './AssetLoader'
 
 export const FRAME_DT_CAP = 0.05
 
@@ -50,6 +51,10 @@ export class Game {
   constructor(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
     this.state = GameState.MENU
+
+    // Muss vor dem ersten setupWorld() stehen: die Wand-Tiles lesen den Wert
+    // beim Laden ihrer Textur.
+    setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy())
 
     this.setupScene()
     this.setupCamera()
@@ -167,7 +172,8 @@ private createContext(): UpdateContext {
     // aufbauen, damit der Tab-Toggle nach einem Retry nicht aus dem Tritt geraet.
     if (this.debug) this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
 
-    await this.player.isReady()
+    // Beide Ready-Promises: sonst blitzen im ersten Frame graue Waende auf.
+    await Promise.all([this.player.isReady(), this.field.isReady()])
   }
 
   private loop = (now: number) => {

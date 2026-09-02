@@ -13,7 +13,8 @@ export interface ColliderBox {
 }
 
 export interface ParsedMap {
-  walls: Array<{ x: number; z: number }>
+  // tile = das Map-Zeichen, ueber das der Wandtyp in WALL_TILES nachgeschlagen wird
+  walls: Array<{ x: number; z: number; tile: string }>
   playerSpawn: { x: number; z: number }
   enemySpawns: Array<{ x: number; z: number }>
   rows: number

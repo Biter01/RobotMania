@@ -11,11 +11,12 @@ export class EnemyAI {
     readonly sightRange = 50;
     readonly attackRange = 8;
     readonly speed = 3;
-    readonly replanInterval = 1;   
+    readonly replanInterval = 0.3;   
     private readonly pathFinder = new AstarPathfinding();   
     private path: THREE.Vector2[] = [];
     private pathIndex = 0;
     private replanTimer = Math.random() * this.replanInterval;
+    //private seperationTimer = 0.5; // Random initial timer to avoid all enemies separating at the same time
 
     private readonly wanderTime = 0.6; 
     private wanderTimer = this.wanderTime; 
@@ -45,8 +46,11 @@ export class EnemyAI {
             //Idle Behaviour
             this.enemy.setActivity('idle');
         }
+        
+       
+        //this.resolveSeparation(gameField.enemies, dt);
+    
 
-        this.resolveSeparation(gameField.enemies);
     }
 
     private attackBehaviour(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
@@ -70,7 +74,7 @@ export class EnemyAI {
     }
 
 
-    private resolveSeparation(enemies: Enemy[]): void {
+    /*private resolveSeparation(enemies: Enemy[], dt: number): void {
         const minDist = ENEMY_RADIUS;
 
         for (const other of enemies) {
@@ -96,7 +100,7 @@ export class EnemyAI {
             this.enemy.position.x += nx * overlap * 0.5;
             this.enemy.position.z += nz * overlap * 0.5;
         }
-    }
+    }*/
     
      private stepTowardsPlayer(dt: number, playerPos: THREE.Vector3, gameField:GameField): void {
         this.replanTimer -= dt;

@@ -1,4 +1,5 @@
 import { ParsedMap } from '../types'
+import { isWallChar } from './WallTiles'
 
 export function parseMap(mapData: string[], tileSize: number): ParsedMap {
   const walls: ParsedMap['walls'] = []
@@ -13,8 +14,10 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
       const ch = mapData[row][col]
       const x = col * tileSize + tileSize / 2
       const z = row * tileSize + tileSize / 2
-      if (ch === '#') {
-        walls.push({ x, z })
+      // Nicht auf '#' hartkodieren: jedes in WALL_TILES registrierte Zeichen ist
+      // eine Wand und damit automatisch solide und nicht begehbar.
+      if (isWallChar(ch)) {
+        walls.push({ x, z, tile: ch })
       } else {
         walkableTiles.push({ x: col, z: row })
         if (ch === 'P') {

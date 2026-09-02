@@ -13,7 +13,7 @@ const renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ canvas, antialia
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(window.innerWidth, window.innerHeight)
 
-let currLevel = EXTREM2;
+let currLevel = EXTREM2
 
 let game: Game = new Game(canvas, renderer)
 
