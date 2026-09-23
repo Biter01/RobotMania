@@ -225,7 +225,7 @@ export class Enemy implements Entity, Damageable {
         damage: 10,
         spawnOffset: new THREE.Vector3(toPlayer.x, 0, toPlayer.z),
         shootDir: toPlayer,
-        speed: 50,
+        speed: 70,
         projectileColor: 0xdb4646,
         damageGroup: DamageGroup.Player
       })

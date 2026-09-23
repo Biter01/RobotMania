@@ -47,6 +47,12 @@ export class Game {
   private disposed = false
   private ac = new AbortController()
 
+  private accumulator = 0
+  private static readonly FIXED_DT = 1 / 60 
+
+
+  private frameCount = 0
+  private fpsTimer = 0
 
   constructor(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
@@ -179,15 +185,23 @@ private createContext(): UpdateContext {
   private loop = (now: number) => {
     if (this.disposed) return
 
-    const rawDt = (now - this.lastTime) / 1000
-    const dt = Math.min(rawDt, FRAME_DT_CAP)
+    let frameTime = (now - this.lastTime) / 1000
     this.lastTime = now
 
-    this.calculateFPS(rawDt)
-    this.update(dt)
-    this.render()
-    this.rafId = requestAnimationFrame(this.loop)
-  }
+    // Schützt vor der "spiral of death": max. 3 Steps pro Frame (0.05 / (1/60))
+    frameTime = Math.min(frameTime, FRAME_DT_CAP)
+
+    this.calculateFPS(frameTime)
+
+    this.accumulator += frameTime
+    while (this.accumulator >= Game.FIXED_DT) {
+        this.update(Game.FIXED_DT)          // <- immer derselbe dt
+        this.accumulator -= Game.FIXED_DT
+    }
+
+  this.render()
+  this.rafId = requestAnimationFrame(this.loop)
+}
 
   private updateHud() {
     const health = Math.max(this.player.getHealth(),0)
@@ -200,8 +214,13 @@ private createContext(): UpdateContext {
   }
 
   private calculateFPS(rawDt: number) {
-    this.fps = this.fps * 0.9 + (1 / rawDt) * 0.1
-    this.fps = Math.min(this.fps, FRAME_CAP)
+    this.frameCount++
+    this.fpsTimer += rawDt
+    if (this.fpsTimer >= 0.3) {              // alle 0,3 s aktualisieren
+      this.fps = this.frameCount / this.fpsTimer
+      this.frameCount = 0
+      this.fpsTimer = 0
+    }
   }
 
   update(dt: number) {

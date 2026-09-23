@@ -38,7 +38,7 @@ export class EnemyAI {
         const inAttackRange = this.isPlayerInAttackRange(this.enemy.position, playerPos);
         const inSight = this.isPlayerInSight(this.enemy.position, playerPos);
 
-        if (inAttackRange) {
+        if (inAttackRange || this.isWandering) {
             this.attackBehaviour(playerPos, dt, gameField.colliders);
         } else if (inSight) {
             this.followBehaviour(playerPos, dt,gameField)
@@ -56,7 +56,7 @@ export class EnemyAI {
     private attackBehaviour(playerPos: THREE.Vector3,dt: number, colliders: ColliderBox[]): void {
         const randomSeed = Math.random()
 
-        if((randomSeed > 0.97 || this.isWandering)) {
+        if((randomSeed > 0.98 || this.isWandering)) {
             this.wanderSide(playerPos,dt,colliders);
         }
             
