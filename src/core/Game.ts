@@ -13,7 +13,7 @@ import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
 import {
   COLOR_SKY,
   AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY,
-  CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR, FRAME_CAP,
+  CAMERA_FOV, CAMERA_NEAR, CAMERA_FAR,
 } from '../GameConstants'
 import { GameState, UpdateContext } from '../types'
 import { UIRenderer } from '../ui/UIRenderer'
