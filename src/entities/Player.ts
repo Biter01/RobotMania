@@ -2,18 +2,18 @@ import * as THREE from 'three'
 import { InputManager } from '../core/InputManager'
 import { clamp } from '../utils/MathUtils'
 import {
-  PLAYER_SPEED, PLAYER_RADIUS, PLAYER_EYE_HEIGHT,
-  MOUSE_SENSITIVITY, PITCH_LIMIT_DEG,
+  PLAYER_SPEED, PLAYER_EYE_HEIGHT,
+  MOUSE_SENSITIVITY, PLAYER_PITCH_LIMIT,
+  PLAYER_HALF_WIDTH_X, PLAYER_HALF_WIDTH_Z,
 } from '../GameConstants'
 import { ShaderPass }     from 'three/addons/postprocessing/ShaderPass.js'
 import { Entity } from './Entity'  
 import { Weapon } from '../weapons/Weapon'
 import { Pistol } from '../weapons/Pistol'
 import { ColliderBox, Damageable, UpdateContext } from '../types'
+import { Physics, PhysicsBody, PhysicsWorld } from '../physics/Physics'
 
-const PITCH_LIMIT = (PITCH_LIMIT_DEG * Math.PI) / 180
-
-export class Player implements Entity, Damageable {
+export class Player implements Entity, Damageable, PhysicsBody {
   camera: THREE.PerspectiveCamera
   position: THREE.Vector3
   private health = 100
@@ -23,11 +23,16 @@ export class Player implements Entity, Damageable {
   private pitch = 0
   readonly moveDir = new THREE.Vector3()
   readonly weapon: Weapon
+  
   //Damage Shader private fields
   private damageFlashIntensity = 0
   private damageShaderPass!: ShaderPass
   private readonly DAMAGE_FLASH_DECAY_RATE = 3 
   private readonly DAMAGE_FLASH_PER_DAMAGE = 0.05
+
+  private colliderBox: ColliderBox
+  readonly baseHeight: number = PLAYER_EYE_HEIGHT
+  private static readonly _velocity = new THREE.Vector3()
 
   constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2) {
     this.camera = camera
@@ -35,11 +40,17 @@ export class Player implements Entity, Damageable {
     this.yaw = Math.PI
     this.camera.position.copy(this.position)
     this.weapon = new Pistol(this.camera)
+    this.colliderBox = {
+      minX: -PLAYER_HALF_WIDTH_X,
+      maxX: PLAYER_HALF_WIDTH_X,
+      minZ: -PLAYER_HALF_WIDTH_Z,
+      maxZ: PLAYER_HALF_WIDTH_Z
+    }
   }
 
   update(dt: number, ctx: UpdateContext) {
     this.handleLook(ctx.input)
-    this.handleMove(dt, ctx.input, ctx.field.colliders)
+    this.handleMove(dt, ctx.input, ctx.field)
     this.updateWeapon(dt, ctx)
 
     this.updateDamageShader(dt)
@@ -60,22 +71,14 @@ export class Player implements Entity, Damageable {
   private handleLook(input: InputManager) {
     const { dx, dy } = input.consumeMouse()
     this.yaw   -= dx * MOUSE_SENSITIVITY
-    this.pitch  = clamp(this.pitch - dy * MOUSE_SENSITIVITY, -PITCH_LIMIT, PITCH_LIMIT)
+    this.pitch  = clamp(this.pitch - dy * MOUSE_SENSITIVITY, -PLAYER_PITCH_LIMIT, PLAYER_PITCH_LIMIT)
 
     const euler = new THREE.Euler(this.pitch, this.yaw, 0, 'YXZ')
     this.camera.quaternion.setFromEuler(euler)
   }
 
-  private overlapsBox(x: number, z: number, box: ColliderBox): boolean {
-    return (
-      x + PLAYER_RADIUS > box.minX &&
-      x - PLAYER_RADIUS < box.maxX &&
-      z + PLAYER_RADIUS > box.minZ &&
-      z - PLAYER_RADIUS < box.maxZ
-    )
-  }
-
-  private handleMove(dt: number, input: InputManager, colliders: ColliderBox[]) {
+  // Entscheidet nur, wohin bewegt wird - Bewegung, Kollision und Stiegen macht Physics
+  private handleMove(dt: number, input: InputManager, world: PhysicsWorld) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const right   = new THREE.Vector3( Math.cos(this.yaw), 0, -Math.sin(this.yaw))
 
@@ -89,15 +92,8 @@ export class Player implements Entity, Damageable {
       this.moveDir.normalize()
     }
 
-    const newX = this.position.x + this.moveDir.x * PLAYER_SPEED * dt
-    const newZ = this.position.z + this.moveDir.z * PLAYER_SPEED * dt
-
-    // Axis-separated collision – allows sliding along walls
-    const blockedX = colliders.some(b => this.overlapsBox(newX, this.position.z, b))
-    if (!blockedX) this.position.x = newX
-
-    const blockedZ = colliders.some(b => this.overlapsBox(this.position.x, newZ, b))
-    if (!blockedZ) this.position.z = newZ
+    const velocity: THREE.Vector3 = Player._velocity.copy(this.moveDir).multiplyScalar(PLAYER_SPEED)
+    Physics.getInstance().computePhysics(this, world, velocity, dt)
 
     this.camera.position.copy(this.position)
   }
@@ -142,5 +138,13 @@ export class Player implements Entity, Damageable {
 
   public isReady(): Promise<void> {
         return this.weapon.ready
+  }
+
+  public getColliderBox(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+    return this.colliderBox;
+  }
+
+  public getPosition(): THREE.Vector3 {
+    return this.position;
   }
 }

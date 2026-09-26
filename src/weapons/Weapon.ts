@@ -8,9 +8,6 @@ const WEAPON_POS_X: number = 0.0
 const WEAPON_POS_Y: number = -0.06
 const WEAPON_POS_Z: number = -0.4
 
-
-
-
 export abstract class Weapon implements Entity {
      readonly cooldown: number
      readonly weaponMesh: THREE.Mesh
@@ -18,7 +15,6 @@ export abstract class Weapon implements Entity {
      readonly damage: number;
      private disposed: boolean = false;
     readonly ready: Promise<void>
-
 
      constructor(camera: THREE.Camera, texturePath: string, cooldown: number, damage: number) {
         this.cooldownTimer = cooldown;
@@ -34,12 +30,16 @@ export abstract class Weapon implements Entity {
 
      private createWeaponMesh(texturePath: string): { mesh: THREE.Mesh; ready: Promise<void> } {
         const material = new THREE.MeshBasicMaterial({
-            transparent: true
+            transparent: true,
+            depthTest: false,
+            depthWrite: false
         })
         const geometry = new THREE.PlaneGeometry(0.6, 0.5)
         const mesh: THREE.Mesh = new THREE.Mesh(geometry, material)
         mesh.position.set(WEAPON_POS_X, WEAPON_POS_Y, WEAPON_POS_Z)
-
+        
+        mesh.renderOrder = 999
+        
         const ready = loadPixelTexture(texturePath, THREE.NoColorSpace).then((texture: THREE.Texture) => {
             // Waffe kann waehrend des Ladens schon disposed sein
             if (this.disposed) {
@@ -65,5 +65,9 @@ export abstract class Weapon implements Entity {
         // Material.dispose() fasst die Textur nicht an
         material.map?.dispose()
         material.dispose()
+    }
+
+    public getPosition(): THREE.Vector3 {
+        return this.weaponMesh.getWorldPosition(new THREE.Vector3())
     }
 }

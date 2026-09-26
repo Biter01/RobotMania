@@ -3,12 +3,10 @@ import { ColliderBox, UpdateContext, DamageGroup } from '../types'
 import { ENEMY_RADIUS, PLAYER_RADIUS } from '../GameConstants'
 import { Entity } from './Entity'
 import { Enemy } from './Enemy'
-
-
+import {Physics} from '../physics/Physics'
 
 const PROJECTILE_LIFETIME = 3.0
 const PROJECTILE_MESH_RADIUS = 0.08
-
 
 interface ProjectileGeometry {
   ox: number
@@ -19,8 +17,7 @@ interface ProjectileGeometry {
   dz: number // Movement Vector sphere
 }
 
-
-function segmentHitsBox(proGeo: ProjectileGeometry, box: ColliderBox): boolean {
+/*function segmentHitsBox(proGeo: ProjectileGeometry, box: ColliderBox): boolean {
   let tmin = 0
   let tmax = 1
   
@@ -47,7 +44,7 @@ function segmentHitsBox(proGeo: ProjectileGeometry, box: ColliderBox): boolean {
   }
 
   return true
-}
+}*/
 
 function segmentHitsCircle(
   proGeo: ProjectileGeometry,
@@ -129,6 +126,8 @@ export class Projectile implements Entity {
   private prev = new THREE.Vector3()
   private group: DamageGroup
 
+  private colliderBox: { minX: number; maxX: number; minZ: number; maxZ: number } 
+
   constructor(config: ProjectileConfig) {
     this.position = config.spawnPosition.clone().add(config.spawnOffset)
     this.prev.copy(this.position)
@@ -142,6 +141,13 @@ export class Projectile implements Entity {
     this.mesh = new THREE.Mesh(geo, mat)
     this.mesh.position.copy(this.position)
     this.group = config.damageGroup
+
+    this.colliderBox = {
+      minX: -PROJECTILE_MESH_RADIUS,
+      maxX: PROJECTILE_MESH_RADIUS,
+      minZ: -PROJECTILE_MESH_RADIUS,
+      maxZ: PROJECTILE_MESH_RADIUS
+    }
   }
 
   update(dt: number, ctx: UpdateContext) {
@@ -167,11 +173,16 @@ export class Projectile implements Entity {
     }
 
 
-    for (const box of ctx.field.colliders) {
+    /*for (const box of ctx.field.colliders) {
       if (segmentHitsBox(proGeo, box)) {
         this.alive = false
         return
       }
+    }*/
+
+    if(Physics.getInstance().checkWallCollision(ctx.field.colliders, this.position, this.getColliderBox())) {
+      this.alive = false
+      return
     }
 
 
@@ -206,6 +217,14 @@ export class Projectile implements Entity {
       enemy: Enemy
   ): boolean {  
     return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)
+  }
+
+  public getColliderBox(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+    return this.colliderBox;
+  }
+
+  public getPosition(): THREE.Vector3 {
+    return this.position;
   }
 
   dispose() {

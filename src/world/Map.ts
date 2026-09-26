@@ -1,5 +1,6 @@
 import { ParsedMap } from '../types'
 import { isWallChar } from './WallTiles'
+import { StairData, isStairChar, isHorizontalStair } from './StairData'
 
 export function parseMap(mapData: string[], tileSize: number): ParsedMap {
   const walls: ParsedMap['walls'] = []
@@ -19,6 +20,7 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
       if (isWallChar(ch)) {
         walls.push({ x, z, tile: ch })
       } else {
+        // Stiegen sind begehbar - ueber welche Seite, entscheidet A*/Physics
         walkableTiles.push({ x: col, z: row })
         if (ch === 'P') {
           playerSpawn = { x, z }
@@ -29,5 +31,35 @@ export function parseMap(mapData: string[], tileSize: number): ParsedMap {
     }
   }
 
-  return { walls, playerSpawn, enemySpawns, rows, cols, walkableTiles }
+  return { walls, playerSpawn, enemySpawns, rows, cols, walkableTiles, stairs: parseStairs(mapData) }
+}
+
+// Gleich gerichtete Stiegen-Tiles in Achsrichtung ('>>', '^' ueber '^') werden zu
+// einer StairData zusammengefasst. Parallele Reihen bleiben getrennte Stiegen.
+function parseStairs(mapData: string[]): StairData[] {
+  const stairs: StairData[] = []
+  const visited: Set<string> = new Set()
+
+  for (let row = 0; row < mapData.length; row++) {
+    for (let col = 0; col < mapData[row].length; col++) {
+      const ch: string = mapData[row][col]
+      if (!isStairChar(ch) || visited.has(`${col},${row}`)) continue
+
+      let maxCol: number = col
+      let maxRow: number = row
+      if (isHorizontalStair(ch)) {
+        while (mapData[row][maxCol + 1] === ch) maxCol++
+      } else {
+        while (mapData[maxRow + 1]?.[col] === ch) maxRow++
+      }
+
+      for (let r = row; r <= maxRow; r++) {
+        for (let c = col; c <= maxCol; c++) {
+          visited.add(`${c},${r}`)
+        }
+      }
+      stairs.push(new StairData(ch, col, row, maxCol, maxRow))
+    }
+  }
+  return stairs
 }

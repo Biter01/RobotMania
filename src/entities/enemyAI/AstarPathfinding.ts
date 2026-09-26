@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { TILE_SIZE } from '../../GameConstants';
 import { GameField } from '../../world/GameField';
-
+import { StairDir, isStairChar, isHorizontalStair } from '../../world/StairData';
 
 class AstarNode {
     nowPos: THREE.Vector2;
@@ -99,13 +99,14 @@ export class AstarPathfinding {
         for(const dir of AstarPathfinding.directions) {
             const neighborPos = node.nowPos.clone().add(dir);
 
-            if(this.isValidTile(neighborPos)) {
+            if(this.isValidTile(neighborPos) && this.isStairTransitionAllowed(node.nowPos, neighborPos)) {
 
                 if(dir.x != 0 && dir.y != 0) {
                     const sideA = node.nowPos.clone().add(new THREE.Vector2(dir.x, 0));
                     const sideB = node.nowPos.clone().add(new THREE.Vector2(0, dir.y));
-                    // if one side is no valid tile don't allow diagonal movement
-                    if (!this.isValidTile(sideA) || !this.isValidTile(sideB)) { 
+                    // if one side is no valid tile don't allow diagonal movement.
+                    // Stiegen-Ecken auch nicht schneiden - dort sitzen die Seiten-Collider
+                    if (!this.isValidTile(sideA) || !this.isValidTile(sideB) || this.isStairTile(sideA) || this.isStairTile(sideB)) {
                         continue;
                     }
                     neighbors.push(new AstarNode(neighborPos, node.goalPos, node, Math.sqrt(2))); // Diagonal movement cost
@@ -137,6 +138,28 @@ export class AstarPathfinding {
         
         return this.gameField.isTileWalkable(tilePos.x, tilePos.y);
 
+    }
+
+    private isStairTile(tilePos: THREE.Vector2): boolean {
+        return isStairChar(this.gameField.getTileChar(tilePos.x, tilePos.y));
+    }
+
+    // Stiegen werden in der Heuristik wie Boden behandelt, sind aber nur entlang ihrer
+    // Achse (von beiden Enden) betretbar und verlassbar. Stiege -> Stiege nur bei gleicher Richtung.
+    private isStairTransitionAllowed(from: THREE.Vector2, to: THREE.Vector2): boolean {
+        const fromChar: string | undefined = this.gameField.getTileChar(from.x, from.y);
+        const toChar: string | undefined = this.gameField.getTileChar(to.x, to.y);
+        const dx: number = to.x - from.x;
+        const dy: number = to.y - from.y;
+
+        if (isStairChar(fromChar) && !this.isAlongStairAxis(fromChar, dx, dy)) return false;
+        if (isStairChar(toChar) && !this.isAlongStairAxis(toChar, dx, dy)) return false;
+        if (isStairChar(fromChar) && isStairChar(toChar) && fromChar !== toChar) return false;
+        return true;
+    }
+
+    private isAlongStairAxis(dir: StairDir, dx: number, dy: number): boolean {
+        return isHorizontalStair(dir) ? dx !== 0 && dy === 0 : dx === 0 && dy !== 0;
     }
 
 

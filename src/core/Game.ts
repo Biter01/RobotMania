@@ -188,7 +188,6 @@ private createContext(): UpdateContext {
     let frameTime = (now - this.lastTime) / 1000
     this.lastTime = now
 
-    // Schützt vor der "spiral of death": max. 3 Steps pro Frame (0.05 / (1/60))
     frameTime = Math.min(frameTime, FRAME_DT_CAP)
 
     this.calculateFPS(frameTime)
