@@ -100,7 +100,7 @@ export class StairData {
 // Duenne Collider an den Laengsseiten jedes Stiegen-Tiles - Stiegen sind nur ueber die Enden
 // betretbar. Ausnahme: liegt daneben ein Tile einer parallelen Stiege mit gleicher Richtung und
 // gleichem index, ist die Hoehe dort identisch und die Fuge bleibt offen (breite Treppe).
-export function buildStairSideColliders(stairs: StairData[]): ColliderBox[] {
+export function buildStairColliders(stairs: StairData[]): ColliderBox[] {
   const lookup: Map<string, { dir: StairDir; index: number }> = new Map()
   for (const stair of stairs) {
     for (const { col, row, index } of stair.tiles()) {
@@ -113,26 +113,53 @@ export function buildStairSideColliders(stairs: StairData[]): ColliderBox[] {
     return neighbor !== undefined && neighbor.dir === dir && neighbor.index === index
   }
 
-  const t: number = STAIR_SIDE_THICKNESS*20
   const colliders: ColliderBox[] = []
+  
   for (const stair of stairs) {
     for (const { col, row, index } of stair.tiles()) {
-      const minX: number = col * TILE_SIZE
-      const maxX: number = minX + TILE_SIZE
-      const minZ: number = row * TILE_SIZE
-      const maxZ: number = minZ + TILE_SIZE
-      // Vom Boden bis zur Oberkante dieses Tiles - die Stufen sind Bloecke ab dem Boden (GameField.buildStairs)
-      const minY: number = 0
-      const maxY: number = (index + 1) * STAIR_COUNT * STAIR_HEIGHT
-
-      if (isHorizontalStair(stair.dir)) {
-        if (!isFlush(stair.dir, index, col, row - 1)) colliders.push({ minX, maxX, minY, maxY, minZ, maxZ: minZ + t })
-        if (!isFlush(stair.dir, index, col, row + 1)) colliders.push({ minX, maxX, minY, maxY, minZ: maxZ - t, maxZ })
-      } else {
-        if (!isFlush(stair.dir, index, col - 1, row)) colliders.push({ minX, maxX: minX + t, minY, maxY, minZ, maxZ })
-        if (!isFlush(stair.dir, index, col + 1, row)) colliders.push({ minX: maxX - t, maxX, minY, maxY, minZ, maxZ })
-      }
+      buildSideColliders(stair,col,row,index,colliders, isFlush)
     }
+    
+    buildBackColliders(stair, colliders)
   }
   return colliders
+}
+
+
+function buildBackColliders(stair:StairData, colliders: ColliderBox[]): void {
+  const END_THICKNESS = STAIR_SIDE_THICKNESS * 20
+
+  switch (stair.dir) {
+      case '>':
+        colliders.push({ minX: stair.maxX - END_THICKNESS, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.maxZ })
+        break
+      case '<':
+        colliders.push({ minX: stair.minX, maxX: stair.minX + END_THICKNESS, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.maxZ })
+        break
+      case 'v':
+        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.maxZ - END_THICKNESS, maxZ: stair.maxZ })
+        break
+      case '^':
+        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.minZ + END_THICKNESS })
+        break
+    }
+}
+
+function buildSideColliders(stair: StairData, col: number, row: number, index: number, colliders: ColliderBox[], isFlush: (dir: StairDir, index: number, col: number, row: number) => boolean): void {
+  const t: number = STAIR_SIDE_THICKNESS*20
+  const minX: number = col * TILE_SIZE
+  const maxX: number = minX + TILE_SIZE
+  const minZ: number = row * TILE_SIZE
+  const maxZ: number = minZ + TILE_SIZE
+  // Vom Boden bis zur Oberkante dieses Tiles - die Stufen sind Bloecke ab dem Boden (GameField.buildStairs)
+  const minY: number = 0
+  const maxY: number = (index + 1) * STAIR_COUNT * STAIR_HEIGHT
+
+  if (isHorizontalStair(stair.dir)) {
+    if (!isFlush(stair.dir, index, col, row - 1)) colliders.push({ minX, maxX, minY, maxY, minZ, maxZ: minZ + t })
+    if (!isFlush(stair.dir, index, col, row + 1)) colliders.push({ minX, maxX, minY, maxY, minZ: maxZ - t, maxZ })
+  } else {
+    if (!isFlush(stair.dir, index, col - 1, row)) colliders.push({ minX, maxX: minX + t, minY, maxY, minZ, maxZ })
+    if (!isFlush(stair.dir, index, col + 1, row)) colliders.push({ minX: maxX - t, maxX, minY, maxY, minZ, maxZ })
+  }
 }

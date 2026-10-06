@@ -10,7 +10,7 @@ import { parseMap } from './Map'
 import { ParsedMap } from '../types'
 import { loadPixelTexture } from '../core/AssetLoader'
 import { WALL_TILES, WallTile, DEFAULT_WALL_UV_SCALE } from './WallTiles'
-import { StairData, StairDir, buildStairSideColliders } from './StairData'
+import { StairData, StairDir, buildStairColliders } from './StairData'
 import { PhysicsWorld } from '../physics/Physics'
 
 // Die Stiegen-Geometrie wird lokal Richtung -z ansteigend gebaut ('^') und dann gedreht
@@ -190,7 +190,7 @@ export class GameField implements PhysicsWorld {
         }
       }
     }
-    this.colliders.push(...buildStairSideColliders(this.parsed.stairs))
+    this.colliders.push(...buildStairColliders(this.parsed.stairs))
 
     if (geos.length === 0) return null
     const mesh = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ color: COLOR_STAIR }))

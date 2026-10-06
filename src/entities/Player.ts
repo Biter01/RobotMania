@@ -11,7 +11,8 @@ import { Entity } from './Entity'
 import { Weapon } from '../weapons/Weapon'
 import { Pistol } from '../weapons/Pistol'
 import { ColliderBox, Damageable, UpdateContext } from '../types'
-import { Physics, PhysicsBody, PhysicsWorld } from '../physics/Physics'
+import { Physics, PhysicsWorld } from '../physics/Physics'
+import {PhysicsBody} from '../physics/Physics'
 
 export class Player implements Entity, Damageable, PhysicsBody {
   camera: THREE.PerspectiveCamera
@@ -32,6 +33,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
 
   private colliderBox: ColliderBox
   readonly baseHeight: number = PLAYER_EYE_HEIGHT
+  velocityY: number = 0
   private static readonly _velocity = new THREE.Vector3()
 
   constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2) {
@@ -44,7 +46,10 @@ export class Player implements Entity, Damageable, PhysicsBody {
       minX: -PLAYER_HALF_WIDTH_X,
       maxX: PLAYER_HALF_WIDTH_X,
       minZ: -PLAYER_HALF_WIDTH_Z,
-      maxZ: PLAYER_HALF_WIDTH_Z
+      maxZ: PLAYER_HALF_WIDTH_Z,
+      // position.y liegt auf Augenhoehe - die Box reicht von den Fuessen bis dorthin
+      minY: -PLAYER_EYE_HEIGHT,
+      maxY: 0
     }
   }
 
@@ -93,6 +98,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     }
 
     const velocity: THREE.Vector3 = Player._velocity.copy(this.moveDir).multiplyScalar(PLAYER_SPEED)
+
     Physics.getInstance().computePhysics(this, world, velocity, dt)
 
     this.camera.position.copy(this.position)
@@ -140,7 +146,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
         return this.weapon.ready
   }
 
-  public getColliderBox(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  public getColliderBox(): ColliderBox {
     return this.colliderBox;
   }
 

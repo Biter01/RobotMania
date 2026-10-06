@@ -4,7 +4,7 @@ import { loadPixelTexture } from '../core/AssetLoader'
 import { StateMachine } from '../states/StateMachine'
 import {EnemyState} from '../states/EnemyState'
 import { EnemyAI } from './enemyAI/EnemyAI'
-import { Damageable, UpdateContext, DamageGroup } from '../types'
+import { Damageable, UpdateContext, DamageGroup, ColliderBox } from '../types'
 import { Entity } from './Entity'
 import { Projectile } from './Projectile'
 import { PhysicsBody } from '../physics/Physics'
@@ -21,6 +21,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
   public mesh: THREE.Sprite
   public position: THREE.Vector3
   readonly baseHeight: number = ENEMY_BASE_HEIGHT
+  velocityY: number = 0
   readonly yMin: number
   readonly yMax: number
   private hp = ENEMY_HP
@@ -40,7 +41,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
   readonly attackCooldown; // Sekunden zwischen Angriffen
   private cooldownTimer; // Timer für den Angriff
 
-  private colliderBox: { minX: number; maxX: number; minZ: number; maxZ: number }
+  private colliderBox: ColliderBox
 
   constructor(x: number, z: number, attackCooldown = 0.3) {
     this.position = new THREE.Vector3(x, this.baseHeight, z)
@@ -59,7 +60,10 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
       minX: -ENEMY_RADIUS,
       maxX: ENEMY_RADIUS,
       minZ: -ENEMY_RADIUS,
-      maxZ: ENEMY_RADIUS
+      maxZ: ENEMY_RADIUS,
+      // position.y liegt auf ENEMY_BASE_HEIGHT - die Box reicht von den Fuessen bis dorthin
+      minY: -ENEMY_BASE_HEIGHT,
+      maxY: 0
     }
 
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
@@ -268,7 +272,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     this.activity = activity
   }
 
-  public getColliderBox(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  public getColliderBox(): ColliderBox {
     return this.colliderBox;
   }
 

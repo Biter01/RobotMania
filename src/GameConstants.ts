@@ -12,6 +12,12 @@ export const STAIR_SIDE_THICKNESS = 0.005
 // Zusatzhoehe auf Stiegen, damit Entities nicht in den Stufenbloecken stecken (Rampe liegt unter den Stufenkanten)
 export const STAIR_HEIGHT_OFFSET  = 0.25
 
+// Gravitation (Beschleunigung nach unten, Einheiten/s²) + maximale Fallgeschwindigkeit
+export const GRAVITY              = 20
+export const MAX_FALL_SPEED       = 30
+// Abstand, den ein Body beim Aufsetzen vor dem Collider stoppt (gegen Float-Rundung)
+export const COLLISION_EPSILON    = 1e-6
+
 // Lighting
 export const AMBIENT_INTENSITY   = 0.4
 export const DIR_LIGHT_INTENSITY = 0.8

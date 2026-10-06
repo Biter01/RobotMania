@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { TILE_SIZE, STAIR_COUNT, STAIR_HEIGHT } from '../GameConstants'
 import { parseMap } from './Map'
-import { StairData, StairTile, buildStairSideColliders } from './StairData'
+import { StairData, StairTile, buildStairColliders } from './StairData'
 
 function stairsOf(rows: string[]): StairData[] {
   return parseMap(rows, TILE_SIZE).stairs
@@ -57,7 +57,7 @@ describe('parseMap stairs', () => {
 })
 
 describe('buildStairSideColliders', () => {
-  const sidesOf = (rows: string[]): number => buildStairSideColliders(stairsOf(rows)).length
+  const sidesOf = (rows: string[]): number => buildStairColliders(stairsOf(rows)).length
 
   it('walls both long sides of a single stair tile', () => {
     expect(sidesOf(['.v.'])).toBe(2)
