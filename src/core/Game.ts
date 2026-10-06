@@ -21,9 +21,16 @@ import { UIRenderer } from '../ui/UIRenderer'
 import { setMaxAnisotropy } from './AssetLoader'
 import type { LevelData } from '../world/LevelData'
 
+/** Upper limit for one frame's time step in seconds, so a stalled tab does not cause a huge jump. */
 export const FRAME_DT_CAP = 0.05
 
 
+/**
+ * Owns the scene, camera, post-processing and game loop, and runs one level at a time.
+ *
+ * Lifetime objects (composer, input, lights) live as long as the Game; level
+ * objects (field, player, projectiles) are rebuilt by {@link loadLevel}.
+ */
 export class Game {
   scene!: THREE.Scene
   camera!: THREE.PerspectiveCamera
@@ -45,30 +52,35 @@ export class Game {
   private debug = false
   private ctx!: UpdateContext
   
-  //Avoid memory leaks
+  // Avoid memory leaks
   private rafId = 0;
   private disposed = false
   private ac = new AbortController()
 
   private accumulator = 0
+  /** Fixed simulation step in seconds; the loop runs update() in steps of this size. */
   private static readonly FIXED_DT = 1 / 60 
 
 
   private frameCount = 0
   private fpsTimer = 0
 
+  /**
+   * @param canvas - The game canvas, used for input and pointer lock.
+   * @param renderer - The shared renderer; it is owned by `main.ts`, not by the Game.
+   */
   constructor(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer) {
     this.renderer = renderer
     this.state = GameState.MENU
 
-    // Muss vor dem ersten setupWorld() stehen: die Wand-Tiles lesen den Wert
-    // beim Laden ihrer Textur.
+    // Must run before the first setupWorld(): blocks read this value when
+    // loading their texture.
     setMaxAnisotropy(this.renderer.capabilities.getMaxAnisotropy())
 
     this.setupScene()
     this.setupCamera()
     this.setupLights()
-    this.setupPostProcessing()   // existiert schon
+    this.setupPostProcessing()
     this.setupInput(canvas)
     this.setupResizeHandler()
   }
@@ -135,10 +147,10 @@ private createContext(): UpdateContext {
   }
 }
 
-  /*
-    This class RenderPass represents a render pass. 
-    It takes a camera and a scene and produces a beauty pass for subsequent post processing effects.
-  */
+  /**
+   * Builds the post-processing chain: a RenderPass produces the beauty pass of
+   * scene and camera, followed by the scanline and damage flash shaders.
+   */
   private setupPostProcessing() {
     this.composer = new EffectComposer(this.renderer)
     this.composer.addPass(new RenderPass(this.scene, this.camera))
@@ -148,11 +160,12 @@ private createContext(): UpdateContext {
     this.composer.addPass(this.scanlinePass)
 
 
-    //New Damage Flash Shader!! Builds upon scanline Shader
+    // Damage flash shader, applied on top of the scanline shader
     this.damageFlashPass = new ShaderPass(DamageFlashShader)
     this.composer.addPass(this.damageFlashPass)
   }
 
+  /** Switches the game state and renders the matching UI screen. */
   setState(next: GameState) {
     this.state = next
   
@@ -164,6 +177,7 @@ private createContext(): UpdateContext {
   }
 
 
+  /** Loads the level and starts the render loop. */
   async start(level: LevelData) {
     await this.loadLevel(level)
     if (this.disposed) return
@@ -171,18 +185,22 @@ private createContext(): UpdateContext {
     this.rafId = requestAnimationFrame(this.loop)
   }
 
+  /**
+   * Replaces the current level with a new one (also used for retries).
+   * Resolves once all textures of the field and player are loaded.
+   */
   async loadLevel(level: LevelData) {
     this.disposeWorld()
     this.setupWorld(level)
     this.setupPlayer()
     this.ctx = this.createContext()
 
-    // disposeWorld() hat die Debug-Pfeile mitgenommen - bei aktivem Debug neu
-    // aufbauen, damit der Tab-Toggle nach einem Retry nicht aus dem Tritt geraet.
-    // Die statischen Collider haengen am Level - deshalb auch ColliderDebug neu bauen.
+    // disposeWorld() removed the debug arrows - rebuild them while debug is on,
+    // so the Tab toggle does not get out of step after a retry.
+    // The static colliders belong to the level, so ColliderDebug is rebuilt too.
     if (this.debug) {this.createDebugHelpers()}
 
-    // Beide Ready-Promises: sonst blitzen im ersten Frame graue Waende auf.
+    // Wait for both ready promises, otherwise grey walls flash up in the first frame.
     await Promise.all([this.player.isReady(), this.field.isReady()])
   }
 
@@ -198,7 +216,7 @@ private createContext(): UpdateContext {
 
     this.accumulator += frameTime
     while (this.accumulator >= Game.FIXED_DT) {
-        this.update(Game.FIXED_DT)          // <- immer derselbe dt
+        this.update(Game.FIXED_DT)          // always the same dt
         this.accumulator -= Game.FIXED_DT
     }
 
@@ -219,13 +237,14 @@ private createContext(): UpdateContext {
   private calculateFPS(rawDt: number) {
     this.frameCount++
     this.fpsTimer += rawDt
-    if (this.fpsTimer >= 0.3) {              // alle 0,3 s aktualisieren
+    if (this.fpsTimer >= 0.3) {              // refresh every 0.3 s
       this.fps = this.frameCount / this.fpsTimer
       this.frameCount = 0
       this.fpsTimer = 0
     }
   }
 
+  /** Advances the simulation by one fixed step. Does nothing unless the game is playing. */
   update(dt: number) {
     if (this.state !== GameState.PLAYING) {
       return
@@ -240,11 +259,12 @@ private createContext(): UpdateContext {
     this.player.update(dt, this.ctx)
     this.updateEnemies(dt);
     this.updateProjectiles(dt, this.ctx)
-    // Nach den Projektilen: neue/geloeschte Geschosse sind sonst einen Step verspaetet
+    // After the projectiles: new or removed shots would otherwise lag one step behind
     this.colliderDebug?.update(this.field.enemies, this.projectiles)
     this.updateHud()
   }
 
+  /** Renders the scene through the post-processing chain. */
   render() {
     this.composer.render()
   }
@@ -267,6 +287,7 @@ private createContext(): UpdateContext {
     this.enemyFacingDebug?.update(enemies)
   }
 
+  /** Toggles the debug view (collider boxes, facing arrows) and player invincibility. */
   public toggleDebug() {
     
     this.debug = !this.debug
@@ -305,8 +326,10 @@ private createContext(): UpdateContext {
     this.projectiles = this.projectiles.filter(p => p.alive)
   }
 
-  // Alles, was zu EINEM Level gehoert. Laeuft bei jedem Retry - der rAF-Loop
-  // und die Game-Lifetime-Objekte (Composer, Input) bleiben dabei bestehen.
+  /**
+   * Disposes everything that belongs to ONE level. Runs on every retry - the rAF
+   * loop and the Game lifetime objects (composer, input) stay alive.
+   */
   private disposeWorld(): void {
     for (const p of this.projectiles) {
       this.scene.remove(p.mesh)
@@ -314,30 +337,31 @@ private createContext(): UpdateContext {
     }
     this.projectiles.length = 0
 
-    // Die Debug-Maps halten sonst Referenzen auf disposte Enemies/Projektile.
+    // The debug maps would otherwise keep references to disposed enemies/projectiles.
     this.disposeDebugHelpers()
 
-    // init() lief evtl. nie (dispose aus dem MENU-State)
+    // The level may never have been loaded (dispose from the MENU state)
     this.field?.dispose()
     this.player?.dispose()
 
     this.ctx = undefined as unknown as UpdateContext
   }
 
+  /** Stops the loop and releases all resources. The renderer is left to its owner. */
   public dispose() {
     if (this.disposed) return
     this.disposed = true
 
-    this.ac.abort()                    // raeumt auch die InputManager-Listener ab
-    cancelAnimationFrame(this.rafId)   // ← Loop stoppen
+    this.ac.abort()                    // also removes the InputManager listeners
+    cancelAnimationFrame(this.rafId)   // stop the loop
 
     this.disposeWorld()
 
     this.composer.dispose()
     this.scanlinePass.dispose()
     this.damageFlashPass.dispose()
-    // this.renderer.dispose() bewusst NICHT - der Renderer gehoert main.ts
+    // Deliberately NOT this.renderer.dispose() - the renderer belongs to main.ts
 
-    this.scene.clear()                 // Lights + Kamera aus dem Setup
+    this.scene.clear()                 // lights + camera from the setup
   }
 }

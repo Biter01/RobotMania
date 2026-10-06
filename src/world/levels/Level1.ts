@@ -1,10 +1,11 @@
 import { LevelData } from '../LevelData'
 
+/** First level, converted from the former ASCII format. */
 export const LEVEL_1: LevelData = {
   objects: [
-    // Boden: Oberseite auf y = 0
+    // Floor: top at y = 0
     { type: 'block', tile: 'floor', position: { x: 16, y: -0.5, z: 16 }, size: { x: 32, y: 1, z: 32 } },
-    // Waende
+    // Walls
     { type: 'block', tile: 'brick', position: { x: 16, y: 1.5, z: 0.5 }, size: { x: 32, y: 3, z: 1 } },
     { type: 'block', tile: 'brick', position: { x: 0.5, y: 1.5, z: 16.5 }, size: { x: 1, y: 3, z: 31 } },
     { type: 'block', tile: 'brick', position: { x: 31.5, y: 1.5, z: 16.5 }, size: { x: 1, y: 3, z: 31 } },
@@ -22,7 +23,7 @@ export const LEVEL_1: LevelData = {
     { type: 'block', tile: 'brick', position: { x: 21, y: 1.5, z: 26.5 }, size: { x: 6, y: 3, z: 1 } },
     { type: 'block', tile: 'brick', position: { x: 23.5, y: 1.5, z: 28 }, size: { x: 1, y: 3, z: 2 } },
     { type: 'block', tile: 'brick', position: { x: 16, y: 1.5, z: 31.5 }, size: { x: 30, y: 3, z: 1 } },
-    // Stiegen
+    // Stairs
     { type: 'stair', dir: '>', position: { x: 18, y: 0, z: 14 }, tiles: 2 },
     { type: 'stair', dir: '>', position: { x: 18, y: 0, z: 15 }, tiles: 2 },
     { type: 'stair', dir: '<', position: { x: 24, y: 0, z: 15 }, tiles: 1 },

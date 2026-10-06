@@ -7,6 +7,7 @@ import { UpdateContext, DamageGroup} from '../types'
 const BARREL_OFFSET_RIGHT = 0;
 const BARREL_OFFSET_DOWN  = 0.3;
 
+/** The player's pistol: fires one projectile per click, limited by the cooldown. */
 export class Pistol extends Weapon {
 
   constructor(camera: THREE.Camera, texturePath = './sprites/weapons/waffe2.png', cooldown = PISTOL_COOLDOWN, damage = PISTOL_DAMAGE) {
@@ -14,6 +15,7 @@ export class Pistol extends Weapon {
       this.cooldownTimer = cooldown;
   }
 
+  /** Counts down the cooldown and fires on a click. */
   update(dt: number, ctx: UpdateContext) {
     this.cooldownTimer -= dt
     if (ctx.input.consumeClick() && this.cooldownTimer <= 0) {
@@ -37,17 +39,18 @@ export class Pistol extends Weapon {
     }   
   }
 
+  /** Offset from the camera to the barrel, in world space. */
   private barrelOffset(camera: THREE.Camera): THREE.Vector3 {
     const forward = new THREE.Vector3()
     camera.getWorldDirection(forward)
 
-    // forward × worldUp ergibt den lokalen "right"-Vektor der Kamera.
-    // Das Ergebnis steht senkrecht auf beiden Vektoren
+    // forward x worldUp gives the camera's local "right" vector.
+    // The result is perpendicular to both vectors
 
     const right = new THREE.Vector3().crossVectors(forward, new THREE.Vector3(0, 1, 0)).normalize()
 
-    // right × forward ergibt den lokalen "up"-Vektor,
-    // sodass wir ein orthogonales Kamerakoordinatensystem haben:
+    // right x forward gives the local "up" vector,
+    // so we get an orthogonal camera coordinate system:
     // forward / right / up
 
     const up    = new THREE.Vector3().crossVectors(right, forward)

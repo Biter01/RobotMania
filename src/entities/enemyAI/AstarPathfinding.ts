@@ -1,5 +1,6 @@
 import { NavGrid, NavNode } from '../../world/NavGrid';
 
+/** A search node: a nav node plus the cost of the best known way to it. */
 interface AstarNode {
     nav: NavNode;
     previousNode: AstarNode | null;
@@ -7,13 +8,20 @@ interface AstarNode {
     fCost: number;
 }
 
-// A* ueber das Ebenen-Nav-Grid. Welche Schritte erlaubt sind (gleiche Hoehe, keine
-// Ecken schneiden, Stiegen nur entlang ihrer Achse), entscheidet NavGrid.neighbors.
+/**
+ * A* over the layered nav grid.
+ *
+ * Which steps are allowed (same height, no corner cutting, stairs only along
+ * their axis) is decided by `NavGrid.neighbors`.
+ */
 export class AstarPathfinding {
 
     private heap: AstarNode[] = [];
 
-    // Ganzer Weg vom Start- zum Zielknoten, path[0] ist der Start. Leer = kein Weg.
+    /**
+     * Finds the cheapest path between two nav nodes.
+     * @returns The whole path from start to goal, with path[0] being the start; empty if there is no path.
+     */
     public findPath(start: NavNode, goal: NavNode, nav: NavGrid): NavNode[] {
         this.heap = [];
         const visited: Set<number> = new Set();
@@ -42,10 +50,10 @@ export class AstarPathfinding {
                 this.addToHeap({ nav: next, previousNode: current, gCost, fCost: gCost + this.heuristic(next, goal) });
             }
         }
-        return [];   // Heap leer, Ziel nie gezogen -> kein Weg
+        return [];   // heap empty, goal never reached -> no path
     }
 
-    // Luftlinie in Tiles - zulaessig, weil jeder Schritt mindestens seine Luftlinie kostet
+    /** Straight-line distance in tiles - admissible, since every step costs at least its straight-line distance. */
     private heuristic(a: NavNode, b: NavNode): number {
         return Math.hypot(a.col - b.col, a.row - b.row);
     }
@@ -60,6 +68,7 @@ export class AstarPathfinding {
         return path;
     }
 
+    /** Pushes a node onto the binary min-heap ordered by fCost. */
     private addToHeap(node: AstarNode): void {
         this.heap.push(node);
         let i = this.heap.length - 1;
@@ -71,9 +80,10 @@ export class AstarPathfinding {
         }
     }
 
+    /** Pops the node with the smallest fCost from the heap. */
     private pickBestNode(): AstarNode {
         const top = this.heap[0];
-        const last = this.heap.pop()!;      // heap ist beim Aufruf garantiert nicht leer
+        const last = this.heap.pop()!;      // the heap is guaranteed non-empty here
         if (this.heap.length > 0) {
             this.heap[0] = last;
             let i = 0;

@@ -14,20 +14,31 @@ const COLOR_DEAD     = 0x555555
 const COLOR_FLASH    = 0xff8888
 const FLASH_DURATION = 0.12
 
-// Sprite-Sheet: 102 frames horizontal in RoboOrginalNew.png
+/** Number of frames in the horizontal sprite sheet RoboOrginalNew.png. */
 const TOTAL_FRAMES = 102
 
+/**
+ * A robot enemy rendered as an animated, direction-dependent sprite.
+ *
+ * Movement and decisions come from its {@link EnemyAI}; the sprite frame comes
+ * from the animation state machine and the angle to the viewer.
+ */
 export class Enemy implements Entity, Damageable, PhysicsBody {
   public mesh: THREE.Sprite
+  /** Position at {@link baseHeight} above the feet. */
   public position: THREE.Vector3
   readonly baseHeight: number = ENEMY_BASE_HEIGHT
   velocityY: number = 0
+  /** Bottom of the hit cylinder, relative to the feet. */
   readonly yMin: number
+  /** Top of the hit cylinder, relative to the feet. */
   readonly yMax: number
   private hp = ENEMY_HP
   private alive = true
+  /** Remaining seconds of the damage flash; dead enemies are removed once it reaches 0. */
   public flashTimer = 0
 
+  /** Direction the enemy looks in; picks the sprite view. */
   public facing: THREE.Vector3 = new THREE.Vector3(0, 0, -1)
   
   private enemyAI: EnemyAI;
@@ -38,12 +49,17 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
   private disposed = false
   public sm: StateMachine<EnemyState> | null = null
   
-  readonly attackCooldown; // Sekunden zwischen Angriffen
-  private cooldownTimer; // Timer für den Angriff
+  readonly attackCooldown; // seconds between attacks
+  private cooldownTimer; // time left until the next attack
 
   private colliderBox: ColliderBox
 
-  // footY = Hoehe der Fuesse am Spawn (Oberseite des Blocks darunter)
+  /**
+   * @param x - Spawn position x.
+   * @param footY - Height of the feet at the spawn (top of the block below).
+   * @param z - Spawn position z.
+   * @param attackCooldown - Seconds between attacks.
+   */
   constructor(x: number, footY: number, z: number, attackCooldown = 0.3) {
     this.position = new THREE.Vector3(x, footY + this.baseHeight, z)
     this.yMin = 0
@@ -62,14 +78,14 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
       maxX: ENEMY_RADIUS,
       minZ: -ENEMY_RADIUS,
       maxZ: ENEMY_RADIUS,
-      // position.y liegt auf ENEMY_BASE_HEIGHT - die Box reicht von den Fuessen bis dorthin
+      // position.y sits at ENEMY_BASE_HEIGHT - the box reaches from the feet up to there
       minY: -ENEMY_BASE_HEIGHT,
       maxY: 0
     }
 
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
-      // Der Enemy kann waehrend des Ladens schon disposed worden sein
-      // (Retry direkt nach dem Start) - sonst leakt diese Textur.
+      // The enemy may already have been disposed while loading
+      // (retry right after the start) - otherwise this texture would leak.
       if (this.disposed) {
         tex.dispose()
         return
@@ -113,25 +129,27 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     return this.mesh.material as THREE.SpriteMaterial
   }
 
+  /** Shows a frame of the sprite sheet by shifting the texture offset. */
   private applyFrame(frame: number): void {
     if (!this.texture) return
     this.texture.offset.x = frame / TOTAL_FRAMES
   }
 
+  /** Which of the 8 view directions the viewer sees, and whether the sprite must be mirrored. */
   private viewSector(viewerPos: THREE.Vector3): { sector: number; mirror: boolean } {
     const toViewer = Enemy._toViewer.copy(viewerPos).sub(this.position)
     toViewer.y = 0
     toViewer.normalize()
     const fx = this.facing.x
     const fz = this.facing.z
-    //Two normalized vectors: facing and toViewer
+    // Two normalized vectors: facing and toViewer
 
-    //cos(o) for x
+    // cos(o) for x
     const dot   = fx * toViewer.x + fz * toViewer.z
 
-    //sin(o) for y
+    // sin(o) for y
     const cross = fx * toViewer.z - fz * toViewer.x 
-    //Plot point and atan2 computes the angle in radians
+    // Plot the point; atan2 computes the angle in radians
     const angle = Math.atan2(-cross, dot)
     let a = angle < 0 ? angle + Math.PI * 2 : angle
     return {
@@ -207,6 +225,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     }
   }
 
+  /** Runs the AI, updates the animation and syncs the sprite with the position. */
   public update(dt: number, ctx: UpdateContext): void {
 
     this.enemyAI.update(dt, ctx.player.position, ctx.field);
@@ -253,6 +272,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     }
   }
 
+  /** Applies damage and starts the hit flash; at 0 HP the enemy dies and plays its death animation. */
   public takeDamage(amount: number): void {
     this.hp -= amount
     if (this.hp <= 0) {
@@ -268,6 +288,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     return this.alive
   }
 
+  /** Sets what the enemy is doing; drives the animation state. */
   public setActivity(activity: 'idle' | 'walk' | 'shoot'): void {
     if (!this.alive) return
     this.activity = activity
@@ -284,7 +305,7 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
     this.texture?.dispose()
     this.texture = null
     this.mesh.removeFromParent()
-    // mesh.geometry NICHT disposen - THREE.Sprite teilt sich eine globale Geometrie
+    // Do NOT dispose mesh.geometry - THREE.Sprite shares one global geometry
     this.mesh.material.dispose()
   }
 

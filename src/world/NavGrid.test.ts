@@ -7,15 +7,18 @@ import { ParsedMap } from '../types'
 import { gridLevel } from './testing/gridLevel'
 import { DEMO_3D } from './levels/Demo3D'
 
+/** Parses `level` and builds its nav grid. */
 function navOf(level: LevelData): NavGrid {
   const parsed: ParsedMap = parseLevel(level, TILE_SIZE)
   return new NavGrid(parsed.blocks, parsed.stairs, TILE_SIZE)
 }
 
+/** Heights of all nodes in a cell. */
 function heightsAt(nav: NavGrid, col: number, row: number): number[] {
   return nav.nodesAt(col, row).map((n: NavNode): number => n.y)
 }
 
+/** Neighbors of `node` as sorted "col,row,y" strings. */
 function neighborCells(nav: NavGrid, node: NavNode): string[] {
   return nav.neighbors(node).map((e): string => `${e.node.col},${e.node.row},${e.node.y}`).sort()
 }
@@ -26,7 +29,7 @@ describe('NavGrid surfaces', () => {
 
     expect(heightsAt(nav, 0, 0)).toEqual([0])
     expect(heightsAt(nav, 2, 0)).toEqual([0])
-    // Unter der Wand ist kein Platz, oben auf der Wand schon
+    // No room under the wall, but on top of it
     expect(heightsAt(nav, 1, 0)).toEqual([3])
   })
 
@@ -46,7 +49,7 @@ describe('NavGrid surfaces', () => {
     const nav: NavGrid = navOf({
       objects: [
         { type: 'block', tile: 'floor', position: { x: 0.5, y: -0.5, z: 0.5 }, size: { x: 1, y: 1, z: 1 } },
-        // Decke nur 0.5 ueber dem Boden
+        // Ceiling only 0.5 above the floor
         { type: 'block', tile: 'floor', position: { x: 0.5, y: 0.6, z: 0.5 }, size: { x: 1, y: 0.2, z: 1 } },
       ],
     })
@@ -58,7 +61,7 @@ describe('NavGrid surfaces', () => {
     const nav: NavGrid = navOf({
       objects: [
         { type: 'block', tile: 'floor', position: { x: 1.5, y: -0.5, z: 0.5 }, size: { x: 3, y: 1, z: 1 } },
-        // 0.1 dick, steht 0.1 neben der Mitte von Zelle 1
+        // 0.1 thick, standing 0.1 beside the center of cell 1
         { type: 'block', tile: 'brick', position: { x: 1.65, y: 1.5, z: 0.5 }, size: { x: 0.1, y: 3, z: 1 } },
       ],
     })
@@ -84,7 +87,7 @@ describe('NavGrid.nodeAt', () => {
 
     expect(nav.nodeAt(11.5, 0, 10.5)?.y).toBe(0)
     expect(nav.nodeAt(11.5, 2, 10.5)?.y).toBe(2)
-    // Auf einer Stiege liegen die Fuesse etwas ueber der Rampe
+    // On a stair the feet are slightly above the ramp
     expect(nav.nodeAt(7.5, 0.6, 3.5)?.stair).not.toBeNull()
   })
 
@@ -98,7 +101,7 @@ describe('NavGrid.neighbors', () => {
     const nav: NavGrid = navOf({
       objects: [
         { type: 'block', tile: 'floor', position: { x: 1, y: -0.5, z: 0.5 }, size: { x: 2, y: 1, z: 1 } },
-        // Kleine Kante: 0.25 hoeher, aber keine Stiege
+        // Small ledge: 0.25 higher, but no stair
         { type: 'block', tile: 'floor', position: { x: 2.5, y: -0.375, z: 0.5 }, size: { x: 1, y: 1.25, z: 1 } },
       ],
     })
@@ -118,9 +121,9 @@ describe('NavGrid.neighbors', () => {
     const nav: NavGrid = navOf(gridLevel(['...', '.>.', '...']))
     const stairNode: NavNode = nav.nodesAt(1, 1)[0]
 
-    // Unten raus auf den Boden ja, oben raus nein (dort ist kein Boden auf Stiegenhoehe)
+    // Leaving at the bottom onto the floor: yes; at the top: no (no surface at stair height there)
     expect(neighborCells(nav, stairNode)).toEqual(['0,1,0'])
-    // Von der Seite nicht hinein
+    // Not entered from the side
     const side: NavNode = nav.nodesAt(1, 0)[0]
     expect(nav.neighbors(side).some((e): boolean => e.node === stairNode)).toBe(false)
   })
@@ -133,7 +136,7 @@ describe('NavGrid.neighbors', () => {
     expect(nav.neighbors(topOfStair).map((e): NavNode => e.node)).toContain(platform)
     expect(nav.neighbors(platform).map((e): NavNode => e.node)).toContain(topOfStair)
 
-    // Vom Plattformrand geht kein Schritt direkt auf den Boden
+    // No step leads from the platform edge straight down to the floor
     const edge: NavNode = nav.nodesAt(9, 1).find((n: NavNode): boolean => n.y === 2)!
     expect(nav.neighbors(edge).every((e): boolean => e.node.y === 2)).toBe(true)
   })

@@ -10,7 +10,7 @@ import { StairData, buildStairColliders } from '../world/StairData'
 import { Physics, PhysicsBody, PhysicsWorld } from './Physics'
 
 const T: number = TILE_SIZE
-// Wie Player: position.y liegt auf Augenhoehe, die Box ist relativ dazu
+// Like Player: position.y sits at eye height, the box is relative to it
 const BASE: number = PLAYER_EYE_HEIGHT
 const TILE_HEIGHT: number = STAIR_COUNT * STAIR_HEIGHT
 
@@ -23,10 +23,10 @@ function body(x: number, z: number): PhysicsBody {
   return { position: new THREE.Vector3(x, BASE, z), baseHeight: BASE, velocityY: 0, getColliderBox: (): ColliderBox => box }
 }
 
-// Wie GameField.buildFloor: Oberkante auf y = 0
+// Like a floor block: top at y = 0
 const FLOOR: ColliderBox = { minX: -100, maxX: 100, minZ: -100, maxZ: 100, minY: -1, maxY: 0 }
 
-// Wie GameField: Lookup ueber Tile-Koordinaten + Seiten-Collider
+// Like GameField: lookup via tile coordinates + side colliders
 function worldWith(stair: StairData | StairData[], extraColliders: ColliderBox[] = []): PhysicsWorld {
   const stairs: StairData[] = Array.isArray(stair) ? stair : [stair]
   return {
@@ -72,7 +72,7 @@ describe('buildStairSideColliders', () => {
     const stair: StairData = new StairData('>', 0, 0, 1, 0)
     const colliders: ColliderBox[] = buildStairColliders([stair])
 
-    // 2 Tiles * 2 Laengsseiten
+    // 2 tiles * 2 long sides
     expect(colliders).toHaveLength(4)
     for (const c of colliders) expect(c.minY).toBe(0)
 
@@ -117,7 +117,7 @@ describe('Physics.computePhysics', () => {
     expect(b.position.x).toBeCloseTo(1.4 * T)
     expect(b.position.y).toBeCloseTo(BASE + stair.heightAt(1.4 * T, 0.5 * T) + STAIR_HEIGHT_OFFSET)
 
-    // Stehen bleiben aendert die Hoehe nicht mehr (kein Aufaddieren pro Frame)
+    // Standing still no longer changes the height (no accumulation per frame)
     physics.computePhysics(b, world, new THREE.Vector3(0, 0, 0), 1)
     expect(b.position.y).toBeCloseTo(BASE + stair.heightAt(1.4 * T, 0.5 * T) + STAIR_HEIGHT_OFFSET)
   })
@@ -147,7 +147,7 @@ describe('Physics.computePhysics', () => {
   })
 
   it('walks sideways between flush parallel stairs without a height jump', () => {
-    // 'vv' in Spalte 1 und 2
+    // 'vv' in columns 1 and 2
     const left: StairData = new StairData('v', 1, 0, 1, 0)
     const right: StairData = new StairData('v', 2, 0, 2, 0)
     const world: PhysicsWorld = worldWith([left, right])
@@ -163,13 +163,13 @@ describe('Physics.computePhysics', () => {
   })
 
   it('blocks sideways between parallel stairs of different height', () => {
-    // Links einzelnes 'v' in Reihe 1, rechts 'v' ueber Reihe 0-1 -> in Reihe 1 hoeher
+    // Left a single 'v' in row 1, right a 'v' over rows 0-1 -> higher in row 1
     const left: StairData = new StairData('v', 1, 1, 1, 1)
     const right: StairData = new StairData('v', 2, 0, 2, 1)
     const world: PhysicsWorld = worldWith([left, right])
     const b: PhysicsBody = body(1.5 * T, 1.5 * T)
 
-    // Erst auf die Stiegenhoehe setzen - blockieren muss es auch fuer einen erhoehten Koerper
+    // First lift to stair height - it must also block an elevated body
     physics.computePhysics(b, world, new THREE.Vector3(0, 0, 0), 1)
     expect(b.position.y).toBeGreaterThan(BASE)
 
@@ -186,7 +186,7 @@ describe('Physics.computePhysics', () => {
     physics.computePhysics(b, world, new THREE.Vector3(0, 0, 0), dt)
     physics.computePhysics(b, world, new THREE.Vector3(6 * T, 0, 0), dt)
 
-    // Erster Frame nach dem Verlassen: knapp unter der Stiegenhoehe, schon im Fallen
+    // First frame after leaving: just below stair height, already falling
     expect(b.position.x).toBeGreaterThan(2 * T)
     expect(b.position.y).toBeLessThan(BASE + stair.HEIGHT)
     expect(b.velocityY).toBeLessThan(0)
@@ -241,7 +241,7 @@ describe('Physics gravity', () => {
     b.position.y = 10
     b.velocityY = -MAX_FALL_SPEED
 
-    // Ein Schritt faellt ~30 Einheiten - weit durch die Plattform hindurch
+    // One step falls ~30 units - far through the platform
     physics.computePhysics(b, world, still, 1)
 
     expect(b.position.y).toBeCloseTo(platform.maxY + PLAYER_EYE_HEIGHT)
@@ -262,7 +262,7 @@ describe('Physics.checkWallCollision', () => {
   })
 
   it('does not use the path of a previously moved body', () => {
-    // Body hinter der Wand bewegen - frueher landete dessen Position im Singleton als Sweep-Start
+    // Move a body behind the wall - its position used to end up in the singleton as the sweep start
     const b: PhysicsBody = body(8, 5)
     physics.computePhysics(b, { colliders: [thinWall], getStairAt: (): undefined => undefined }, new THREE.Vector3(0.1, 0, 0), 1)
 
@@ -296,7 +296,7 @@ describe('Physics.checkWallCollision', () => {
     const farWall: ColliderBox = { minX: 8, maxX: 8.1, minZ: 0, maxZ: 10, minY: 0, maxY: 3 }
     const from: THREE.Vector3 = new THREE.Vector3(0, 1, 5)
     const to: THREE.Vector3 = new THREE.Vector3(10, 1, 5)
-    // Kontakt, sobald die Vorderkante der Box (x + r) die nahe Wand bei x = 5 erreicht
+    // Contact as soon as the box's front edge (x + r) reaches the near wall at x = 5
     expect(physics.sweep([farWall, thinWall], from, to, projectileBox)).toBeCloseTo((thinWall.minX - r) / 10)
   })
 

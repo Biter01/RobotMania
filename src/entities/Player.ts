@@ -14,6 +14,11 @@ import { ColliderBox, Damageable, UpdateContext } from '../types'
 import { Physics, PhysicsWorld } from '../physics/Physics'
 import {PhysicsBody} from '../physics/Physics'
 
+/**
+ * The first-person player: mouse look, WASD movement, health and weapon.
+ *
+ * The camera follows {@link position}, which sits at eye height above the feet.
+ */
 export class Player implements Entity, Damageable, PhysicsBody {
   camera: THREE.PerspectiveCamera
   position: THREE.Vector3
@@ -25,7 +30,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
   readonly moveDir = new THREE.Vector3()
   readonly weapon: Weapon
   
-  //Damage Shader private fields
+  // Damage shader fields
   private damageFlashIntensity = 0
   private damageShaderPass!: ShaderPass
   private readonly DAMAGE_FLASH_DECAY_RATE = 3 
@@ -36,7 +41,12 @@ export class Player implements Entity, Damageable, PhysicsBody {
   velocityY: number = 0
   private static readonly _velocity = new THREE.Vector3()
 
-  // spawnFootY = Hoehe der Fuesse am Spawn (Oberseite des Blocks darunter)
+  /**
+   * @param camera - Camera that follows the player.
+   * @param spawnX - Spawn position x.
+   * @param spawnZ - Spawn position z.
+   * @param spawnFootY - Height of the feet at the spawn (top of the block below).
+   */
   constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2, spawnFootY = 0) {
     this.camera = camera
     this.position = new THREE.Vector3(spawnX, spawnFootY + PLAYER_EYE_HEIGHT, spawnZ)
@@ -48,12 +58,13 @@ export class Player implements Entity, Damageable, PhysicsBody {
       maxX: PLAYER_HALF_WIDTH_X,
       minZ: -PLAYER_HALF_WIDTH_Z,
       maxZ: PLAYER_HALF_WIDTH_Z,
-      // position.y liegt auf Augenhoehe - die Box reicht von den Fuessen bis dorthin
+      // position.y sits at eye height - the box reaches from the feet up to there
       minY: -PLAYER_EYE_HEIGHT,
       maxY: 0
     }
   }
 
+  /** Handles look, movement and the weapon for one step. */
   update(dt: number, ctx: UpdateContext) {
     this.handleLook(ctx.input)
     this.handleMove(dt, ctx.input, ctx.field)
@@ -70,6 +81,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     this.damageShaderPass.uniforms.intensity.value = this.damageFlashIntensity
   }
 
+  /** Sets the post-processing pass that shows the red damage flash. */
   public setDamageShader(shader: ShaderPass): void {
     this.damageShaderPass = shader
   }
@@ -83,7 +95,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     this.camera.quaternion.setFromEuler(euler)
   }
 
-  // Entscheidet nur, wohin bewegt wird - Bewegung, Kollision und Stiegen macht Physics
+  /** Only decides where to move - movement, collisions and stairs are handled by Physics. */
   private handleMove(dt: number, input: InputManager, world: PhysicsWorld) {
     const forward = new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw))
     const right   = new THREE.Vector3( Math.cos(this.yaw), 0, -Math.sin(this.yaw))
@@ -105,6 +117,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     this.camera.position.copy(this.position)
   }
 
+  /** Applies damage (unless invincible) and triggers the damage flash. */
   public takeDamage(amount: number): void {
     if(this.invincible) {
       return
@@ -135,6 +148,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     this.weapon.dispose()
   }
 
+  /** Turns damage on or off (used by the debug view). */
   public setInvincible(boolVal:boolean):void {
     this.invincible = boolVal
   }
@@ -143,6 +157,7 @@ export class Player implements Entity, Damageable, PhysicsBody {
     return this.health;
   }
 
+  /** Resolves once the weapon sprite is loaded. */
   public isReady(): Promise<void> {
         return this.weapon.ready
   }

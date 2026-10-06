@@ -76,6 +76,7 @@ public/sprites/
 - **Gegner-AI:** `idle → chase (dist < 10) → attack (dist < 1.5)`; gleiche AABB-Kollision wie Spieler
 - Kein Anti-Aliasing, kein Weichzeichnen – bewusster Retro-Look
 - TypeScript Typen immer explizit schreiben!
+- **Kommentare:** immer auf **Englisch**. Kommentare an Deklarationen sind **TypeDoc** (`/** ... */`), nicht `//`. Jede exportierte Klasse, jedes Interface und jede wichtige Methode/Funktion bekommt einen TypeDoc-Kommentar: erster Satz = was sie tut, danach bei Bedarf Details sowie `@param` / `@returns` (Format `@param name - Beschreibung`). Einheiten und Koordinatenbezug nennen (z. B. „world units“, „relative to the feet“). Querverweise mit `{@link Name}`. Inline-Kommentare in Funktionskörpern bleiben `//` und erklären das *Warum*, nicht das *Was*.
 
 ## Controls
 

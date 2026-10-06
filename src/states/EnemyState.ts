@@ -1,3 +1,4 @@
+/** Animation states of an enemy: activity and view direction (34 = three-quarter view). */
 export enum EnemyState {
   IdleFront,
   IdleLeft,

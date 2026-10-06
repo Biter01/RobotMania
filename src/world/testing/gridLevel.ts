@@ -2,9 +2,13 @@ import { TILE_SIZE, WALL_HEIGHT } from '../../GameConstants'
 import { LevelData, LevelObject } from '../LevelData'
 import { isStairChar, isHorizontalStair } from '../StairData'
 
-// Nur fuer Tests: baut aus einem kleinen ASCII-Raster ein LevelData auf einer Ebene
-// ('#' Wand, '.' Boden, '<' '>' '^' 'v' Stiegen). So bleiben Fixtures lesbar.
-// Kein Teil des Spiels - Levels werden direkt als LevelData geschrieben.
+/**
+ * Test helper: builds a single-level {@link LevelData} from a small ASCII grid
+ * (`'#'` wall, `'.'` floor, `'<' '>' '^' 'v'` stairs), so fixtures stay readable.
+ *
+ * Not part of the game - real levels are written directly as LevelData.
+ * @param rows - One string per grid row.
+ */
 export function gridLevel(rows: string[]): LevelData {
   const depth: number = rows.length
   const width: number = Math.max(...rows.map((r: string): number => r.length))

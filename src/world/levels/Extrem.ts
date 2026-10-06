@@ -1,10 +1,11 @@
 import { LevelData } from '../LevelData'
 
+/** Stress test level with many enemies, converted from the former ASCII format. */
 export const EXTREM: LevelData = {
   objects: [
-    // Boden: Oberseite auf y = 0
+    // Floor: top at y = 0
     { type: 'block', tile: 'floor', position: { x: 16, y: -0.5, z: 16 }, size: { x: 32, y: 1, z: 32 } },
-    // Waende
+    // Walls
     { type: 'block', tile: 'brick', position: { x: 16, y: 1.5, z: 0.5 }, size: { x: 32, y: 3, z: 1 } },
     { type: 'block', tile: 'brick', position: { x: 0.5, y: 1.5, z: 16.5 }, size: { x: 1, y: 3, z: 31 } },
     { type: 'block', tile: 'brick', position: { x: 31.5, y: 1.5, z: 16.5 }, size: { x: 1, y: 3, z: 31 } },

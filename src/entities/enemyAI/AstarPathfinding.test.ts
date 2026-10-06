@@ -13,12 +13,13 @@ import { AstarPathfinding } from './AstarPathfinding'
 // Helpers
 // ---------------------------------------------------------------------------
 
+/** Parses `level` and builds its nav grid. */
 function navOf(level: LevelData): NavGrid {
   const parsed: ParsedMap = parseLevel(level, TILE_SIZE)
   return new NavGrid(parsed.blocks, parsed.stairs, TILE_SIZE)
 }
 
-// Knoten auf Bodenhoehe (oder der angegebenen Hoehe) einer Zelle
+/** The node of a cell at floor height (or at the given height). */
 function at(nav: NavGrid, col: number, row: number, y: number = 0): NavNode {
   const node: NavNode | undefined = nav.nodesAt(col, row).find((n: NavNode): boolean => Math.abs(n.y - y) < 1e-6)
   if (!node) throw new Error(`no node at ${col},${row},${y}`)
@@ -33,6 +34,7 @@ function stepCost(dx: number, dy: number): number {
   return dx !== 0 && dy !== 0 ? Math.SQRT2 : 1
 }
 
+/** Octile cost of a path, comparable to optimalCost. */
 function pathCost(path: NavNode[]): number {
   let total: number = 0
   for (let i = 1; i < path.length; i++) {
@@ -45,8 +47,11 @@ const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
   [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1],
 ]
 
-// Referenz: Dijkstra direkt auf dem ASCII-Raster (eine Ebene, keine Stiegen) mit
-// derselben Eckenregel - unabhaengig von NavGrid, damit die Tests nicht sich selbst pruefen.
+/**
+ * Reference: Dijkstra directly on the ASCII grid (one level, no stairs) with the
+ * same corner rule - independent of NavGrid, so the tests do not check themselves.
+ * @returns The optimal cost, or -1 if the goal is unreachable.
+ */
 function optimalCost(rows: string[], start: [number, number], goal: [number, number]): number {
   const free = (x: number, y: number): boolean => rows[y]?.[x] === '.'
   if (!free(...start) || !free(...goal)) return -1
@@ -72,7 +77,7 @@ function optimalCost(rows: string[], start: [number, number], goal: [number, num
   return -1
 }
 
-// Deterministischer Zufall fuer den Fuzz-Test
+/** Deterministic random numbers for the fuzz test. */
 function mulberry32(seed: number): () => number {
   let a: number = seed
   return (): number => {
@@ -185,11 +190,11 @@ describe('stairs and levels', () => {
     const path: NavNode[] = finder.findPath(at(nav, 2, 2), at(nav, 12, 14, 2), nav)
 
     expect(path.length).toBeGreaterThan(0)
-    // Die Stiege ist der einzige Weg nach oben
+    // The stair is the only way up
     expect(path.some((n: NavNode): boolean => n.stair !== null)).toBe(true)
-    // Ueber die Bruecke (Hoehe 2), nicht unten durch
+    // Over the bridge (height 2), not underneath
     expect(path.some((n: NavNode): boolean => n.row === 10 && n.y === 2)).toBe(true)
-    // Hoehe aendert sich nur auf der Stiege
+    // The height only changes on the stair
     for (let i = 1; i < path.length; i++) {
       const a: NavNode = path[i - 1]
       const b: NavNode = path[i]
@@ -223,7 +228,7 @@ describe('stairs and levels', () => {
   })
 
   it('walks along a composed stair in its direction only', () => {
-    // Stiege fuehrt von y=0 auf eine Plattform mit Oberseite 3 (3 Tiles x 1)
+    // The stair leads from y=0 onto a platform with its top at 3 (3 tiles x 1)
     const level: LevelData = {
       objects: [
         { type: 'block', tile: 'floor', position: { x: 4, y: -0.5, z: 0.5 }, size: { x: 8, y: 1, z: 1 } },

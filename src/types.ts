@@ -7,6 +7,12 @@ import type { StairData } from "./world/StairData"
 import type { Vec3 } from "./world/LevelData"
 
 
+/**
+ * Axis-aligned bounding box.
+ *
+ * Static colliders store world coordinates; entity colliders store values
+ * relative to the entity's position (see `toWorldBox` in `Physics.ts`).
+ */
 export interface ColliderBox {
   minX: number
   maxX: number
@@ -17,20 +23,24 @@ export interface ColliderBox {
   maxY: number
 }
 
+/** A level after parsing: the objects of a `LevelData`, ready for `GameField`. */
 export interface ParsedMap {
-  // Achsparallele Quader: position = Mittelpunkt, size = Ausdehnung in x/y/z
+  /** Axis-aligned boxes: `position` is the center, `size` the extent along x/y/z. */
   blocks: Array<{ tile: string; position: Vec3; size: Vec3 }>
-  // y = Hoehe der Fuesse
+  /** Player spawn; `y` is the height of the feet. */
   playerSpawn: Vec3
+  /** Enemy spawns; `y` is the height of the feet. */
   enemySpawns: Vec3[]
   stairs: Array<StairData>
 }
 
+/** Something that can take damage and die. */
 export interface Damageable {
   takeDamage(amount: number): void;
   isAlive(): boolean;
 }
 
+/** Top-level state of the game loop and UI. */
 export enum GameState {
   MENU = 'MENU',
   PLAYING = 'PLAYING',
@@ -39,15 +49,19 @@ export enum GameState {
   LOADING = 'LOADING'
 }
 
+/** Everything an entity needs during one frame update. */
 export interface UpdateContext {
+  /** Seconds since the last frame. */
   dt: number
   input: InputManager
   camera: THREE.PerspectiveCamera
   field: GameField
   player: Player
-  spawnProjectile: (p: Projectile) => void 
+  /** Adds a new projectile to the running game. */
+  spawnProjectile: (p: Projectile) => void
 }
 
+/** Which side a projectile damages. */
 export enum DamageGroup {
   Player,
   Enemy

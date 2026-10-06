@@ -3,25 +3,34 @@ import { ColliderBox } from '../types'
 import type { StairData } from '../world/StairData'
 import { STAIR_HEIGHT_OFFSET, GRAVITY, MAX_FALL_SPEED, COLLISION_EPSILON } from '../GameConstants'
 
-// Was computePhysics vom bewegten Objekt braucht (Player, Enemy)
+/** What {@link Physics.computePhysics} needs from a moving object (Player, Enemy). */
 export interface PhysicsBody {
     position: THREE.Vector3
-    // y-Position auf Bodenhoehe; auf Stiegen kommt die Stiegenhoehe dazu
+    /** Height of the position above the feet; on stairs the stair height is added on top. */
     readonly baseHeight: number
-    // Vertikale Geschwindigkeit (negativ = fallen), wird von der Gravitation beschleunigt
+    /** Vertical speed (negative = falling), accelerated by gravity. */
     velocityY: number
+    /** Collider relative to {@link position}. */
     getColliderBox(): ColliderBox
 }
 
-// Was computePhysics vom Spielfeld braucht - GameField erfuellt das
+/** What {@link Physics.computePhysics} needs from the playfield - GameField implements it. */
 export interface PhysicsWorld {
+    /** Static colliders in world coordinates. */
     readonly colliders: ColliderBox[]
-    // footY = Hoehe der Fuesse - bei uebereinanderliegenden Stiegen entscheidet sie, welche gemeint ist
+    /**
+     * Returns the stair at a world position.
+     * @param footY - Height of the feet; decides which stair is meant when several lie above each other.
+     */
     getStairAt(x: number, z: number, footY: number): StairData | undefined
 }
 
-// Entity-Collider sind relativ zur position gespeichert - hier in Weltkoordinaten umrechnen.
-// Wird auch von ColliderDebug genutzt, damit die Anzeige exakt der Physik entspricht.
+/**
+ * Converts an entity collider (stored relative to its position) into world coordinates.
+ *
+ * Also used by ColliderDebug, so the display matches the physics exactly.
+ * @param out - Optional box to write into instead of allocating a new one.
+ */
 export function toWorldBox(position: THREE.Vector3, box: ColliderBox, out?: ColliderBox): ColliderBox {
     const result: ColliderBox = out ?? { minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY: 0 }
     result.minX = position.x + box.minX
@@ -33,6 +42,7 @@ export function toWorldBox(position: THREE.Vector3, box: ColliderBox, out?: Coll
     return result
 }
 
+/** Which horizontal axes were blocked during a move. */
 export interface MoveResult {
     blockedX: boolean
     blockedZ: boolean
@@ -40,12 +50,19 @@ export interface MoveResult {
 
 
 
+/**
+ * Collision and movement for player and enemies (singleton).
+ *
+ * Bodies move axis by axis with swept AABB tests, follow stair ramps, and fall
+ * under gravity everywhere else.
+ */
 export class Physics {
 
     private static instance: Physics | null = null
     private static readonly _probe = new THREE.Vector3()
     private static readonly _movement = new THREE.Vector3()
 
+    /** Returns the shared instance. */
     public static getInstance(): Physics {
         if (!Physics.instance) {
             Physics.instance = new Physics()
@@ -53,8 +70,11 @@ export class Physics {
         return Physics.instance
     }
 
-    // Bewegt body um velocity * dt (nur x/z), prueft Kollisionen und setzt die Hoehe auf Stiegen.
-    // Abseits von Stiegen wirkt die Gravitation auf body.velocityY.
+    /**
+     * Moves `body` by `velocity * dt` (x/z only), resolves collisions and sets the height on stairs.
+     * Away from stairs, gravity acts on `body.velocityY`.
+     * @returns Which axes were blocked.
+     */
     public computePhysics(body: PhysicsBody, world: PhysicsWorld, velocity: THREE.Vector3, dt: number): MoveResult {
         const oldX: number = body.position.x
         const oldZ: number = body.position.z
@@ -70,14 +90,18 @@ export class Physics {
         return result
     }
 
-    // Sweept die Box entlang from -> to (gegen Tunneling bei hoher Speed). Steckt die Box schon
-    // beim Start in einem Collider, zaehlt das ebenfalls als Kollision.
+    /**
+     * Sweeps the box along from -> to (against tunneling at high speed). If the box
+     * already overlaps a collider at the start, that counts as a collision too.
+     */
     public checkWallCollision(colliders: ColliderBox[], from: THREE.Vector3, to: THREE.Vector3, colliderBox: ColliderBox): boolean {
         return this.sweep(colliders, from, to, colliderBox) !== null
     }
 
-    // Fruehester Kontakt (0..1) entlang from -> to ueber alle Collider - null = freie Strecke.
-    // 0 = die Box steckt schon beim Start in einem Collider.
+    /**
+     * Earliest contact (0..1) along from -> to over all colliders.
+     * @returns The contact time, 0 if the box already overlaps a collider at the start, or null for a free path.
+     */
     public sweep(colliders: ColliderBox[], from: THREE.Vector3, to: THREE.Vector3, colliderBox: ColliderBox): number | null {
         const movement: THREE.Vector3 = Physics._movement.subVectors(to, from)
         let tMin: number | null = null
@@ -92,8 +116,10 @@ export class Physics {
         return tMin
     }
 
-    // Beschleunigt velocityY nach unten. Kollidiert der naechste Schritt, wird y nur bis zum
-    // fruehesten Kontakt bewegt (kein Tunneling durch duenne Collider) und velocityY auf 0 gesetzt.
+    /**
+     * Accelerates velocityY downwards. If the next step collides, y only moves up to the
+     * earliest contact (no tunneling through thin colliders) and velocityY is set to 0.
+     */
     private applyGravity(body: PhysicsBody, colliders: ColliderBox[], dt: number): void {
         body.velocityY = Math.max(body.velocityY - GRAVITY * dt, -MAX_FALL_SPEED)
 
@@ -108,14 +134,14 @@ export class Physics {
             return
         }
 
-        // Knapp vor dem Kontakt stoppen: Float-Rundung darf den Body nicht in den Collider schieben,
-        // sonst wuerde er dort feststecken. t = 0 (liegt auf / steckt drin) -> gar nicht bewegen.
+        // Stop just before the contact: float rounding must not push the body into the collider,
+        // or it would get stuck there. t = 0 (resting on / stuck inside) -> do not move at all.
         const tSafe: number = Math.max(0, t - COLLISION_EPSILON / Math.abs(stepY))
         pos.y += stepY * tSafe
         body.velocityY = 0
     }
 
-    // Achsenweise: eine blockierte Achse wird verworfen, die andere trotzdem ausgefuehrt (Sliden an Waenden)
+    /** Axis by axis: a blocked axis is dropped, the other one is still applied (sliding along walls). */
     private move(body: PhysicsBody, colliders: ColliderBox[], velocity: THREE.Vector3, dt: number): MoveResult {
         const pos: THREE.Vector3 = body.position
         const colliderBox: ColliderBox = body.getColliderBox()
@@ -142,9 +168,12 @@ export class Physics {
         return result
     }
 
-    // Auf einer Stiege wird die Hoehe absolut aus dem Fortschritt entlang der Rampe gesetzt,
-    // plus STAIR_OFFSET. Beim Verlassen faellt der Offset wieder weg: unten raus -> Bodenhoehe,
-    // oben raus -> Stiegenhoehe, von dort uebernimmt die Gravitation. Gibt zurueck, ob body auf einer Stiege steht.
+    /**
+     * On a stair, the height is set absolutely from the progress along the ramp, plus
+     * STAIR_HEIGHT_OFFSET. When leaving, the offset is dropped again: out at the bottom ->
+     * the stair's base height, out at the top -> its top height; gravity takes over from there.
+     * @returns Whether the body stands on a stair.
+     */
     private stairMovement(body: PhysicsBody, world: PhysicsWorld, oldX: number, oldZ: number): boolean {
         const { x, z } = body.position
         const footY: number = body.position.y - body.baseHeight
@@ -154,7 +183,7 @@ export class Physics {
             return true
         }
 
-        // In diesem Frame verlassen: heightAt klemmt auf 0 bzw. HEIGHT
+        // Left in this frame: heightAt clamps to 0 or HEIGHT
         const prev: StairData | undefined = world.getStairAt(oldX, oldZ, footY)
         if (prev) {
             body.position.y = body.baseHeight + prev.baseY + prev.heightAt(x, z)
@@ -162,8 +191,10 @@ export class Physics {
         return false
     }
 
-    // Zeitpunkt t (0..1) entlang movement, an dem die Box den Collider erstmals beruehrt - null = kein Treffer.
-    // Ueberlappt die Box den Collider schon beim Start, ist t = 0.
+    /**
+     * Time t (0..1) along `movement` at which the box first touches the collider - null = no hit.
+     * If the box already overlaps the collider at the start, t = 0.
+     */
     private sweepTime(
         startPosition: THREE.Vector3,
         movement: THREE.Vector3,
@@ -217,12 +248,13 @@ export class Physics {
             z[1],
         )
 
-        // tExit > 0 statt tEnter >= 0: ein Start im Collider (tEnter < 0) ist auch ein Treffer.
-        // Buendig anliegen und wegbewegen ergibt tExit = 0 und bleibt frei.
+        // tExit > 0 instead of tEnter >= 0: starting inside the collider (tEnter < 0) is a hit too.
+        // Touching flush and moving away gives tExit = 0 and stays free.
         const hit: boolean = tEnter < tExit && tExit > 0 && tEnter <= 1
         return hit ? Math.max(tEnter, 0) : null
     }
 
+    /** Entry and exit time of a moving point on one axis, or null if it never enters [min, max]. */
     private sweepAxis(
         start: number,
         movement: number,
@@ -230,7 +262,7 @@ export class Physics {
         max: number,
     ): [number, number] | null {
         if (movement === 0) {
-            // Beruehren zaehlt nicht als Treffer
+            // Touching does not count as a hit
             if (start <= min || start >= max) {
                 return null
             }

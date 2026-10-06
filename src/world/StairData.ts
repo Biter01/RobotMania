@@ -1,28 +1,39 @@
 import { TILE_SIZE, STAIR_COUNT, STAIR_WIDTH, STAIR_HEIGHT, STAIR_SIDE_THICKNESS } from '../GameConstants'
 import type { ColliderBox } from '../types'
 
-// Der Pfeil zeigt bergauf: '>' steigt Richtung +x, '<' Richtung -x,
-// '^' Richtung -z (kleinere Zeile), 'v' Richtung +z.
+/**
+ * Direction a stair rises in. The arrow points uphill: `'>'` rises towards +x,
+ * `'<'` towards -x, `'^'` towards -z (smaller row) and `'v'` towards +z.
+ */
 export type StairDir = '<' | '>' | '^' | 'v'
 
+/** All valid {@link StairDir} characters. */
 export const STAIR_CHARS: ReadonlySet<string> = new Set<string>(['<', '>', '^', 'v'])
 
+/** Whether `ch` is one of the {@link STAIR_CHARS}. */
 export function isStairChar(ch: string | undefined): ch is StairDir {
   return ch !== undefined && STAIR_CHARS.has(ch)
 }
 
+/** Whether the stair runs along the x axis (`'<'` or `'>'`). */
 export function isHorizontalStair(dir: StairDir): boolean {
   return dir === '<' || dir === '>'
 }
 
+/** One grid tile of a stair. */
 export interface StairTile {
   col: number
   row: number
-  // 0 = unterstes Tile der Stiege
+  /** Position along the stair; 0 = lowest tile. */
   index: number
 }
 
-// Eine Stiege aus einem oder mehreren gleich gerichteten Tiles in Achsrichtung.
+/**
+ * A stair made of one or more tiles in a row along its axis, all rising in the same direction.
+ *
+ * The stair covers a range of grid tiles and starts at height {@link baseY}.
+ * Each tile rises by `STAIR_COUNT * STAIR_HEIGHT`.
+ */
 export class StairData {
   readonly dir: StairDir
   readonly minCol: number
@@ -30,16 +41,24 @@ export class StairData {
   readonly maxCol: number
   readonly maxRow: number
   readonly tileCount: number
-  // Hoehe des unteren Endes in Weltkoordinaten
+  /** Height of the lower end in world coordinates. */
   readonly baseY: number
   readonly DEPTH: number = TILE_SIZE
 
-  // Weltgrenzen
+  // World bounds
   readonly minX: number
   readonly maxX: number
   readonly minZ: number
   readonly maxZ: number
 
+  /**
+   * @param dir - Rising direction.
+   * @param minCol - Smallest column covered by the stair.
+   * @param minRow - Smallest row covered by the stair.
+   * @param maxCol - Largest column covered by the stair.
+   * @param maxRow - Largest row covered by the stair.
+   * @param baseY - Height of the lower end.
+   */
   public constructor(dir: StairDir, minCol: number, minRow: number, maxCol: number, maxRow: number, baseY: number = 0) {
     this.dir = dir
     this.baseY = baseY
@@ -55,25 +74,27 @@ export class StairData {
     this.maxZ = (maxRow + 1) * TILE_SIZE
   }
 
+  /** Total number of steps. */
   public get steps(): number {
     return this.tileCount * STAIR_COUNT
   }
 
-  // Lauflaenge der Stiege
+  /** Walking length of the stair. */
   public get WIDTH(): number {
     return STAIR_WIDTH * this.steps
   }
 
+  /** Total rise from the lower to the upper end. */
   public get HEIGHT(): number {
     return STAIR_HEIGHT * this.steps
   }
 
-  // Hoehe des oberen Endes in Weltkoordinaten
+  /** Height of the upper end in world coordinates. */
   public get topY(): number {
     return this.baseY + this.HEIGHT
   }
 
-  // Richtung (in Tiles), in die die Stiege ansteigt
+  /** Direction (in tiles) in which the stair rises. */
   public get upStep(): { dCol: number; dRow: number } {
     switch (this.dir) {
       case '>': return { dCol: 1, dRow: 0 }
@@ -83,11 +104,12 @@ export class StairData {
     }
   }
 
+  /** Whether the world position lies within the stair's footprint (ignoring height). */
   public containsXZ(x: number, z: number): boolean {
     return x >= this.minX && x < this.maxX && z >= this.minZ && z < this.maxZ
   }
 
-  // Alle Tiles der Stiege, index 0 = unteres Ende
+  /** All tiles of the stair, ordered from the lower end (index 0) upwards. */
   public tiles(): StairTile[] {
     const result: StairTile[] = []
     for (let i = 0; i < this.tileCount; i++) {
@@ -101,12 +123,15 @@ export class StairData {
     return result
   }
 
-  // Hoehe ueber dem unteren Ende (baseY) an einer Weltposition: Rampe vom unteren zum oberen Ende
+  /**
+   * Height above the lower end ({@link baseY}) at a world position, along a ramp
+   * from the lower to the upper end.
+   */
   public heightAt(x: number, z: number): number {
     return this.progressAt(x, z) * this.HEIGHT
   }
 
-  // Fortschritt entlang der Stiege vom unteren (0) zum oberen Ende (1), geklemmt
+  /** Progress along the stair from the lower (0) to the upper end (1), clamped. */
   public progressAt(x: number, z: number): number {
     let walked: number
     switch (this.dir) {
@@ -119,11 +144,16 @@ export class StairData {
   }
 }
 
-// Duenne Collider an den Laengsseiten jedes Stiegen-Tiles - Stiegen sind nur ueber die Enden
-// betretbar. Ausnahme: liegt daneben ein Tile einer parallelen Stiege mit gleicher Richtung und
-// gleichem index, ist die Hoehe dort identisch und die Fuge bleibt offen (breite Treppe).
+/**
+ * Builds the colliders that make stairs walkable only from their ends.
+ *
+ * Thin colliders run along the long sides of every stair tile, plus a low
+ * collider at the upper end's back. Exception: if the neighbor is a tile of a
+ * parallel stair with the same direction, index and base height, the height is
+ * identical there and the seam stays open (a wide staircase).
+ */
 export function buildStairColliders(stairs: StairData[]): ColliderBox[] {
-  // Pro Tile koennen mehrere Stiegen uebereinander liegen - daher eine Liste
+  // Several stairs can lie above each other on one tile - hence a list
   const lookup: Map<string, Array<{ dir: StairDir; index: number; baseY: number }>> = new Map()
   for (const stair of stairs) {
     for (const { col, row, index } of stair.tiles()) {
@@ -179,7 +209,7 @@ function buildSideColliders(stair: StairData, col: number, row: number, index: n
   const maxX: number = minX + TILE_SIZE
   const minZ: number = row * TILE_SIZE
   const maxZ: number = minZ + TILE_SIZE
-  // Vom unteren Ende bis zur Oberkante dieses Tiles - die Stufen sind Bloecke ab baseY (GameField.buildStairs)
+  // From the lower end to the top of this tile - the steps are blocks starting at baseY (GameField.buildStairs)
   const minY: number = stair.baseY
   const maxY: number = stair.baseY + (index + 1) * STAIR_COUNT * STAIR_HEIGHT
 

@@ -2,8 +2,15 @@ import { ParsedMap } from '../types'
 import { StairData, isHorizontalStair } from './StairData'
 import { LevelData } from './LevelData'
 
-// Objektliste -> ParsedMap. Stiegen werden vom Objekt (Ecke + Laenge) in StairData
-// (Tile-Bereich + baseY) umgerechnet; das Nav-Grid baut GameField daraus (NavGrid.ts).
+/**
+ * Turns a level's object list into a {@link ParsedMap}.
+ *
+ * Stair objects (corner + length) are converted to {@link StairData} (tile range
+ * + baseY). The nav grid is built from the result by `GameField` (see `NavGrid.ts`).
+ *
+ * @param level - The level to parse.
+ * @param tileSize - Edge length of a grid tile; stair positions are divided by it.
+ */
 export function parseLevel(level: LevelData, tileSize: number): ParsedMap {
   const blocks: ParsedMap['blocks'] = []
   const enemySpawns: ParsedMap['enemySpawns'] = []
@@ -30,6 +37,7 @@ export function parseLevel(level: LevelData, tileSize: number): ParsedMap {
   return { blocks, playerSpawn, enemySpawns, stairs }
 }
 
+/** Converts a stair object (min corner + number of tiles) into StairData. */
 function toStairData(dir: StairData['dir'], x: number, y: number, z: number, tiles: number, tileSize: number): StairData {
   const col: number = Math.round(x / tileSize)
   const row: number = Math.round(z / tileSize)

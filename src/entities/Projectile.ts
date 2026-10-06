@@ -5,34 +5,47 @@ import { Entity } from './Entity'
 import { Enemy } from './Enemy'
 import {Physics} from '../physics/Physics'
 
+/** Seconds before a projectile disappears on its own. */
 const PROJECTILE_LIFETIME = 3.0
+/** Radius of the projectile sphere and its collider. */
 const PROJECTILE_MESH_RADIUS = 0.08
 
+/** The path of a projectile during one step: start point o and movement d. */
 interface ProjectileGeometry {
   ox: number
   oy: number 
-  oz: number // Starting point x,y,z
+  oz: number // start point x, y, z
   dx: number 
   dy: number 
-  dz: number // Movement Vector sphere
+  dz: number // movement vector of the sphere
 }
 
+/**
+ * Whether the projectile's path segment hits a vertical cylinder.
+ *
+ * @param proGeo - Start point and movement of the projectile.
+ * @param cx - Center of the cylinder (x).
+ * @param cz - Center of the cylinder (z).
+ * @param radius - Radius of the cylinder in the XZ plane.
+ * @param yMin - Bottom of the cylinder in world coordinates.
+ * @param yMax - Top of the cylinder in world coordinates.
+ */
 function segmentHitsCircle(
   proGeo: ProjectileGeometry,
-  cx: number, cz: number,            // Zentrum des Gegners (XZ)
-  radius: number,                    // Radius des Gegners (XZ-Kreis)
-  yMin: number, yMax: number,       // Höhe des Zylinders
+  cx: number, cz: number,            // center of the target (XZ)
+  radius: number,                    // radius of the target (XZ circle)
+  yMin: number, yMax: number,       // height range of the cylinder
 ): boolean {
 
-  // Länge der Bewegung im XZ-Bereich (für Projektion)
+  // Squared length of the movement in the XZ plane (for the projection)
   const lenSq = proGeo.dx * proGeo.dx + proGeo.dz * proGeo.dz
 
   // ------------------------------------------------------------
-  // 1. PROJEKTION:
-  // Finde den Punkt auf der Flugbahn (Segment),
-  // der dem Gegner im XZ-Bereich am nächsten liegt.
+  // 1. PROJECTION:
+  // Find the point on the flight path (segment)
+  // that is closest to the target in the XZ plane.
   //
-  // Das ist der Punkt mit minimalem Abstand zur Kreismitte.
+  // That is the point with the smallest distance to the circle's center.
   // ------------------------------------------------------------
   const t = lenSq > 1e-12
     ? Math.max(
@@ -45,36 +58,37 @@ function segmentHitsCircle(
     : 0
 
   // ------------------------------------------------------------
-  // 2. NÄCHSTER PUNKT (MINIMALER ABSTANDSPUNKT)
+  // 2. CLOSEST POINT (POINT OF MINIMUM DISTANCE)
   //
-  // Punkt auf der Flugbahn bei t
-  // und Abstand zum Kreiszentrum
+  // Point on the flight path at t
+  // and its distance to the circle's center
   // ------------------------------------------------------------
   const nearX = proGeo.ox + t * proGeo.dx - cx
   const nearZ = proGeo.oz + t * proGeo.dz - cz
 
   // ------------------------------------------------------------
-  // 3. HORIZONTALER TEST (XZ-Ebene)
+  // 3. HORIZONTAL TEST (XZ plane)
   //
-  // Prüfe ob dieser Punkt innerhalb des Radius liegt.
+  // Check whether this point lies within the radius.
   //
-  // -> Das ist der minimale Abstand zur Kreismitte
-  // -> Wenn dieser größer als Radius ist, gibt es keinen Treffer
+  // -> This is the minimum distance to the circle's center
+  // -> If it is larger than the radius, there is no hit
   // ------------------------------------------------------------
   if (nearX * nearX + nearZ * nearZ >= radius * radius)
     return false
 
   // ------------------------------------------------------------
-  // 4. VERTIKALER TEST (Y-Achse)
+  // 4. VERTICAL TEST (Y axis)
   //
-  // Berechne Y-Position des gleichen Punktes auf der Linie
+  // Compute the y position of the same point on the line
   // ------------------------------------------------------------
   const nearY = proGeo.oy + t * proGeo.dy
 
-  // Prüfe ob der Punkt innerhalb der Zylinder-Höhe liegt
+  // Check whether the point lies within the cylinder's height
   return nearY >= yMin && nearY <= yMax
 }
 
+/** Parameters for spawning a {@link Projectile}. */
 interface ProjectileConfig {
   size: THREE.Vector2
   spawnPosition: THREE.Vector3
@@ -83,10 +97,18 @@ interface ProjectileConfig {
   shootDir: THREE.Vector3
   speed: number
   projectileColor: number
-  damageGroup: DamageGroup   // NEU
+  /** Which side this projectile damages. */
+  damageGroup: DamageGroup
 }
 
 
+/**
+ * A fast shot that flies in a straight line.
+ *
+ * Every step it sweeps against the static colliders and stops at the first
+ * wall; before that it checks hits against enemies or the player, depending
+ * on its damage group.
+ */
 export class Projectile implements Entity {
   mesh: THREE.Mesh
   position: THREE.Vector3
@@ -101,8 +123,8 @@ export class Projectile implements Entity {
 
   constructor(config: ProjectileConfig) {
     this.position = config.spawnPosition.clone().add(config.spawnOffset)
-    // Der erste Sweep startet beim Schuetzen, nicht beim Spawn: liegt der Spawn-Offset
-    // in oder hinter einer Wand, wird das so als Wandtreffer erkannt.
+    // The first sweep starts at the shooter, not at the spawn point: if the spawn
+    // offset lies in or behind a wall, this is detected as a wall hit.
     this.prev.copy(config.spawnPosition)
     this.damage = config.damage
 
@@ -125,6 +147,7 @@ export class Projectile implements Entity {
     }
   }
 
+  /** Moves the projectile, stops it at walls and applies damage on a hit. */
   update(dt: number, ctx: UpdateContext) {
     this.age += dt
     if (this.age > PROJECTILE_LIFETIME) {
@@ -134,8 +157,8 @@ export class Projectile implements Entity {
 
     this.position.addScaledVector(this.velocity, dt)
 
-    // Fruehester Wandkontakt auf der Strecke prev -> position. Die Flugbahn endet dort,
-    // damit weder Gegner hinter der Wand getroffen noch Gegner davor uebersprungen werden.
+    // Earliest wall contact on the path prev -> position. The flight path ends there,
+    // so enemies behind the wall are not hit and enemies in front of it are not skipped.
     const tWall: number | null = Physics.getInstance().sweep(ctx.field.colliders, this.prev, this.position, this.getColliderBox())
     const reach: number = tWall ?? 1
 
@@ -178,10 +201,10 @@ export class Projectile implements Entity {
   private playerIsHit(
       proGeo: ProjectileGeometry,
       ctx: UpdateContext,
-      yMin: number, yMax: number,       // Höhe des Zylinders): boolean {
+      yMin: number, yMax: number,       // height range of the cylinder, relative to the feet
 
   ): boolean {
-    // yMin/yMax sind relativ zu den Fuessen - der Spieler kann auf einer hoeheren Ebene stehen
+    // yMin/yMax are relative to the feet - the player can stand on a higher level
     const footY: number = ctx.player.position.y - ctx.player.baseHeight
     return segmentHitsCircle(proGeo, ctx.player.position.x,ctx.player.position.z,PLAYER_RADIUS,footY + yMin,footY + yMax)
   }
@@ -190,7 +213,7 @@ export class Projectile implements Entity {
       proGeo: ProjectileGeometry,
       enemy: Enemy
   ): boolean {  
-    // yMin/yMax sind relativ zu den Fuessen - der Gegner kann auf einer hoeheren Ebene stehen
+    // yMin/yMax are relative to the feet - the enemy can stand on a higher level
     const footY: number = enemy.position.y - enemy.baseHeight
     return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, footY + enemy.yMin, footY + enemy.yMax)
   }

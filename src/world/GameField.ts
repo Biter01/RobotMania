@@ -14,7 +14,7 @@ import { StairData, StairDir, buildStairColliders } from './StairData'
 import { PhysicsWorld } from '../physics/Physics'
 import { NavGrid } from './NavGrid'
 
-// Die Stiegen-Geometrie wird lokal Richtung -z ansteigend gebaut ('^') und dann gedreht
+/** Stair geometry is built locally rising towards -z (`'^'`) and then rotated by this angle. */
 const STAIR_ROTATION: Record<StairDir, number> = {
   '^': 0,
   '<': Math.PI / 2,
@@ -22,21 +22,30 @@ const STAIR_ROTATION: Record<StairDir, number> = {
   '>': -Math.PI / 2,
 }
 
-// Toleranz, mit der die Fuesse einer Stiege zugeordnet werden (unter baseY / ueber topY)
+/** Tolerance for matching feet to a stair (below baseY / above topY). */
 const STAIR_FOOT_TOLERANCE: number = 0.5
 
-//Singleton class that represents the game field, including blocks, stairs and enemies
+/**
+ * The playable world of one level: block and stair meshes, their colliders,
+ * the enemies and the nav grid.
+ *
+ * Implements {@link PhysicsWorld}, so it can be passed straight to the physics.
+ */
 export class GameField implements PhysicsWorld {
+  /** All static colliders (blocks and stair sides) in world coordinates. */
   readonly colliders: ColliderBox[] = []
+  /** Living enemies of this level. */
   readonly enemies: Enemy[] = []
-  // y = Hoehe der Fuesse
+  /** Player spawn; `y` is the height of the feet. */
   readonly playerSpawn: Vec3
-  // Ebenen-Nav-Grid fuer die Gegner-Wegfindung
+  /** Layered nav grid for enemy pathfinding. */
   readonly nav: NavGrid
 
-  // Analog zu Weapon.ready: der ctor bleibt synchron, die Block-Texturen kommen
-  // asynchron nach. Game.loadLevel() wartet darauf, damit im ersten Frame keine
-  // untexturierten Bloecke zu sehen sind.
+  /**
+   * Like Weapon.ready: the constructor stays synchronous and block textures
+   * arrive asynchronously. Game.loadLevel() awaits this, so no untextured
+   * blocks are visible in the first frame.
+   */
   readonly ready: Promise<void>
 
   private meshes: THREE.Mesh[] = []
@@ -45,6 +54,7 @@ export class GameField implements PhysicsWorld {
   private textures: THREE.Texture[] = []
   private disposed: boolean = false
 
+  /** Builds meshes, colliders, enemies and the nav grid for `level`. */
   public constructor(level: LevelData) {
     this.parsed = parseLevel(level, TILE_SIZE)
     this.playerSpawn = this.parsed.playerSpawn
@@ -62,10 +72,12 @@ export class GameField implements PhysicsWorld {
     this.ready = Promise.all(this.pending).then(() => undefined)
   }
 
+  /** Resolves once all block textures are loaded. See {@link ready}. */
   public isReady(): Promise<void> {
     return this.ready
   }
 
+  /** Adds all meshes and enemy sprites to the scene. */
   render(scene: THREE.Scene) {
     for (const mesh of this.meshes) {
       scene.add(mesh)
@@ -75,8 +87,10 @@ export class GameField implements PhysicsWorld {
     }
   }
 
-  // Ein gemergtes Mesh pro Blocktyp: mergeGeometries kennt keine Material-Gruppen,
-  // also braucht jede Textur ihr eigenes Mesh.
+  /**
+   * One merged mesh per block type: mergeGeometries does not support material
+   * groups, so every texture needs its own mesh.
+   */
   private buildBlocks(): THREE.Mesh[] {
     const geosByTile = new Map<string, THREE.BufferGeometry[]>()
 
@@ -110,15 +124,15 @@ export class GameField implements PhysicsWorld {
   }
 
   private createBlockMesh(tileKey: string, geos: THREE.BufferGeometry[]): THREE.Mesh {
-    // COLOR_WALL_BLOCK ist der Fallback, solange die Textur laedt - und bleibt
-    // stehen, falls ein Schluessel keine Definition hat.
+    // COLOR_WALL_BLOCK is the fallback while the texture loads - and stays
+    // if a key has no definition.
     const mat = new THREE.MeshLambertMaterial({ color: COLOR_WALL_BLOCK })
     const mesh = new THREE.Mesh(mergeGeometries(geos), mat)
 
     const def: WallTile | undefined = WALL_TILES[tileKey]
     if (!def) return mesh
 
-    // Blocktyp ohne Textur: nur Farbe
+    // Block type without a texture: color only
     if (!def.texture) {
       mat.color.setHex(def.color ?? COLOR_WALL_BLOCK)
       return mesh
@@ -129,8 +143,8 @@ export class GameField implements PhysicsWorld {
     this.pending.push(
       loadPixelTexture(def.texture, THREE.SRGBColorSpace, { mipmaps: true }).then(
         (tex: THREE.Texture) => {
-          // Retry/Level-Wechsel kann das Feld waehrend des Ladens disposed haben
-          // - sonst leakt diese Textur.
+          // A retry/level change may have disposed the field while loading
+          // - otherwise this texture would leak.
           if (this.disposed) {
             tex.dispose()
             return
@@ -142,8 +156,8 @@ export class GameField implements PhysicsWorld {
 
           this.textures.push(tex)
           mat.map = tex
-          // Erst jetzt auf den Tint wechseln: der graue Fallback wuerde die
-          // Textur sonst abdunkeln.
+          // Only switch to the tint now: the grey fallback would otherwise
+          // darken the texture.
           mat.color.setHex(def.color ?? 0xffffff)
           mat.needsUpdate = true
         }
@@ -153,8 +167,10 @@ export class GameField implements PhysicsWorld {
     return mesh
   }
 
-  // Alle Stufen aller Stiegen in einem gemergten Mesh. Jede Stufe ist ein Block von
-  // baseY bis zu ihrer Hoehe; zusammengesetzte Stiegen bauen auf dem vorigen Tile auf.
+  /**
+   * All steps of all stairs in one merged mesh. Every step is a block from
+   * baseY up to its height; composed stairs build on top of the previous tile.
+   */
   private buildStairs(): THREE.Mesh | null {
     const geos: THREE.BufferGeometry[] = []
 
@@ -165,7 +181,7 @@ export class GameField implements PhysicsWorld {
         for (let s = 1; s <= STAIR_COUNT; s++) {
           const height: number = STAIR_HEIGHT * (index * STAIR_COUNT + s)
           const geo = new THREE.BoxGeometry(TILE_SIZE, height, STAIR_WIDTH)
-          // Lokal: Stufe 1 an der +z-Kante des Tiles, letzte Stufe an der -z-Kante
+          // Local: step 1 at the tile's +z edge, last step at the -z edge
           const localZ: number = TILE_SIZE / 2 - STAIR_WIDTH * (s - 0.5)
           geo.translate(0, height / 2, localZ)
           geo.rotateY(STAIR_ROTATION[stair.dir])
@@ -182,8 +198,11 @@ export class GameField implements PhysicsWorld {
     return mesh
   }
 
-  // Stiege unter den Fuessen. Liegen mehrere Stiegen uebereinander (z. B. unter
-  // einer Bruecke), zaehlt nur die, deren Hoehenbereich die Fuesse enthaelt.
+  /**
+   * Finds the stair under the feet. If several stairs lie above each other
+   * (e.g. under a bridge), only the one whose height range contains the feet counts.
+   * @param footY - Height of the feet.
+   */
   public getStairAt(x: number, z: number, footY: number): StairData | undefined {
     return this.parsed.stairs.find((s: StairData): boolean =>
       s.containsXZ(x, z) &&
@@ -197,21 +216,22 @@ export class GameField implements PhysicsWorld {
     }
   }
 
+  /** Releases all meshes, textures and enemies of this level. */
   public dispose() {
-    // Vor dem Aufraeumen setzen: noch laufende Textur-Loads erkennen daran, dass
-    // sie ins Leere laufen, und geben ihre Textur selbst wieder frei.
+    // Set before cleaning up: texture loads still in flight see this and
+    // release their texture themselves.
     this.disposed = true
 
     for (const mesh of this.meshes) {
-      // Erst abhaengen: eine disposte Geometry, die noch in der Scene haengt,
-      // wird beim naechsten render() neu registriert und neu hochgeladen.
+      // Detach first: a disposed geometry still in the scene would be
+      // registered and uploaded again on the next render().
       mesh.removeFromParent()
       mesh.geometry.dispose()
       ;(mesh.material as THREE.Material).dispose()
     }
 
-    // Die Materials geben ihre map nicht mit frei - sonst bliebe pro Retry eine
-    // 1024er-Blocktextur im GPU-Speicher liegen.
+    // Materials do not release their map - otherwise every retry would leave
+    // a 1024px block texture in GPU memory.
     for (const tex of this.textures) {
       tex.dispose()
     }
@@ -220,7 +240,7 @@ export class GameField implements PhysicsWorld {
       enemie.dispose();
     }
 
-    // Arrays leeren - Game.ctx.field zeigt auf diese Instanz
+    // Empty the arrays - Game.ctx.field still points at this instance
     this.meshes.length = 0
     this.colliders.length = 0
     this.enemies.length = 0
@@ -229,10 +249,14 @@ export class GameField implements PhysicsWorld {
   }
 }
 
-// BoxGeometry legt auf jede Seite UVs von 0..1 - bei grossen Bloecken wuerde die
-// Textur gestreckt. Hier wird jede Seite auf ihre Groesse in Tiles skaliert, damit die
-// Textur pro TILE_SIZE einmal wiederholt wird, egal wie gross der Block ist.
-// Seiten-Reihenfolge von BoxGeometry: +x, -x, +y, -y, +z, -z (je 4 Vertices).
+/**
+ * Scales a box's UVs to its size in tiles.
+ *
+ * BoxGeometry puts UVs from 0..1 on every face, which would stretch the texture
+ * on large blocks. Scaling each face to its size in tiles repeats the texture
+ * once per TILE_SIZE, no matter how big the block is.
+ * BoxGeometry face order: +x, -x, +y, -y, +z, -z (4 vertices each).
+ */
 function scaleBoxUVs(geo: THREE.BoxGeometry, size: Vec3): void {
   const uv: THREE.BufferAttribute = geo.getAttribute('uv') as THREE.BufferAttribute
   const faceScale: Array<[number, number]> = [

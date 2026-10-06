@@ -35,7 +35,6 @@ import * as THREE from 'three'
  * than top/bottom. Correct `dist` by the aspect ratio if that becomes an
  * issue (similar to how `resolution` is handled in ScanlineShader).
  */
-
 export const DamageFlashShader = {
   uniforms: {
     tDiffuse:   { value: null as THREE.Texture | null },

@@ -1,53 +1,68 @@
 import type { StairDir } from './StairData'
 
-// Ein Level ist eine Liste frei platzierter Objekte in Welt-Koordinaten (x, y, z).
-// y zeigt nach oben. Es gibt keinen automatischen Boden: alles, worauf man stehen
-// kann, ist ein Block.
+/**
+ * The level format.
+ *
+ * A level is a list of freely placed objects in world coordinates (x, y, z),
+ * with y pointing up. There is no implicit floor: everything you can stand on
+ * is a block.
+ * @module
+ */
 
+/** A point or extent in world coordinates; y points up. */
 export interface Vec3 {
   x: number
   y: number
   z: number
 }
 
-// Achsparalleler Quader: Wand, Boden, Plattform, Bruecke ...
-// Die Oberseite jedes Blocks ist begehbar, sofern darueber genug Platz ist.
+/**
+ * Axis-aligned box: wall, floor, platform, bridge ...
+ *
+ * The top of every block is walkable, as long as there is enough room above it.
+ */
 export interface BlockObject {
   type: 'block'
-  // Schluessel in WALL_TILES -> Textur
+  /** Key in `WALL_TILES` that selects the texture or color. */
   tile: string
-  // Mittelpunkt des Quaders
+  /** Center of the box. */
   position: Vec3
-  // Ausdehnung entlang x, y, z
+  /** Extent along x, y and z. */
   size: Vec3
 }
 
-// Stiegen sind die einzige Verbindung zwischen Ebenen unterschiedlicher Hoehe.
-// x/z ist die Ecke mit minimalem x/z und liegt auf dem Tile-Raster (Vielfaches von
-// TILE_SIZE), y ist die Hoehe des unteren Endes. Die Stiege steigt pro Tile um
-// STAIR_COUNT * STAIR_HEIGHT; das obere Ende braucht eine Flaeche auf genau dieser
-// Hoehe, damit Gegner dort weitergehen koennen.
+/**
+ * A stair - the only connection between levels of different height.
+ *
+ * `position.x`/`position.z` is the corner with the smallest x/z and must lie on
+ * the tile grid (a multiple of `TILE_SIZE`); `position.y` is the height of the
+ * lower end. The stair rises by `STAIR_COUNT * STAIR_HEIGHT` per tile; its upper
+ * end needs a surface at exactly that height so enemies can continue there.
+ */
 export interface StairObject {
   type: 'stair'
   dir: StairDir
   position: Vec3
-  // Anzahl hintereinanderliegender Stiegen-Tiles in Laufrichtung
+  /** Number of consecutive stair tiles along the walking direction. */
   tiles: number
 }
 
-// Spawn-Positionen: y ist die Hoehe der Fuesse (= Oberseite des Blocks darunter)
+/** Player spawn; `position.y` is the height of the feet (= top of the block below). */
 export interface PlayerSpawnObject {
   type: 'player'
   position: Vec3
 }
 
+/** Enemy spawn; `position.y` is the height of the feet (= top of the block below). */
 export interface EnemySpawnObject {
   type: 'enemy'
   position: Vec3
 }
 
+/** Any object that can be placed in a level. */
 export type LevelObject = BlockObject | StairObject | PlayerSpawnObject | EnemySpawnObject
 
+/** A complete level. */
 export interface LevelData {
   objects: LevelObject[]
 }

@@ -2,26 +2,33 @@ import { ENEMY_RADIUS, NAV_HEADROOM, NAV_HEIGHT_TOLERANCE, STAIR_COUNT, STAIR_HE
 import { ParsedMap } from '../types'
 import { StairData, isHorizontalStair } from './StairData'
 
-// Ebenen-Nav-Grid: pro Zelle (col, row) kann es mehrere begehbare Knoten in
-// unterschiedlicher Hoehe geben (Boden unter einer Bruecke + Bruecke darueber).
-// Knoten derselben Hoehe sind direkt verbunden; die einzige Verbindung zwischen
-// verschiedenen Hoehen sind Stiegen.
+/**
+ * A walkable spot in the {@link NavGrid}: one surface of one grid cell.
+ *
+ * A cell (col, row) can hold several nodes at different heights (the floor
+ * under a bridge and the bridge above it).
+ */
 export interface NavNode {
+  /** Unique index within its NavGrid. */
   readonly id: number
   readonly col: number
   readonly row: number
-  // Hoehe der Flaeche (bei Stiegen: Mitte des Stiegen-Tiles)
+  /** Height of the surface (on stairs: middle of the stair tile). */
   readonly y: number
+  /** The stair this node lies on, or null for a block surface. */
   readonly stair: StairData | null
-  // 0 = unterstes Tile der Stiege, -1 bei normalen Flaechen
+  /** Index of the stair tile (0 = lowest tile), -1 for block surfaces. */
   readonly stairIndex: number
 }
 
+/** A step from one node to a neighbor. */
 export interface NavEdge {
   node: NavNode
+  /** Walking cost: 1 for a straight step, sqrt(2) for a diagonal one. */
   cost: number
 }
 
+/** Axis-aligned box in world coordinates. */
 interface Volume {
   minX: number
   maxX: number
@@ -36,11 +43,23 @@ const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
   [1, 1], [-1, 1], [1, -1], [-1, -1],
 ]
 
+/**
+ * Layered navigation grid for enemy pathfinding.
+ *
+ * Every block top with at least `NAV_HEADROOM` of free space above it becomes
+ * a walkable node, and so does every stair tile. Nodes of the same height are
+ * connected directly; stairs are the only connection between different heights.
+ */
 export class NavGrid {
   readonly tileSize: number
   private readonly cells: Map<string, NavNode[]> = new Map()
   private readonly nodes: NavNode[] = []
 
+  /**
+   * @param blocks - All solid blocks of the level.
+   * @param stairs - All stairs of the level.
+   * @param tileSize - Edge length of a grid cell.
+   */
   public constructor(blocks: ParsedMap['blocks'], stairs: StairData[], tileSize: number) {
     this.tileSize = tileSize
 
@@ -56,16 +75,23 @@ export class NavGrid {
     this.addStairNodes(stairs)
   }
 
+  /** Total number of nodes. */
   public get nodeCount(): number {
     return this.nodes.length
   }
 
+  /** All nodes of a cell, lowest first (stair nodes last). */
   public nodesAt(col: number, row: number): readonly NavNode[] {
     return this.cells.get(key(col, row)) ?? []
   }
 
-  // Knoten an einer Weltposition; footY = Hoehe der Fuesse. Bei mehreren Ebenen in
-  // einer Zelle gewinnt die, deren Hoehe am naechsten an den Fuessen liegt.
+  /**
+   * Finds the node at a world position.
+   *
+   * If a cell has several levels, the one closest to the feet wins.
+   * @param footY - Height of the feet.
+   * @returns The node, or undefined if the cell has no walkable surface.
+   */
   public nodeAt(x: number, footY: number, z: number): NavNode | undefined {
     const candidates: readonly NavNode[] = this.nodesAt(Math.floor(x / this.tileSize), Math.floor(z / this.tileSize))
     let best: NavNode | undefined
@@ -75,7 +101,7 @@ export class NavGrid {
     return best
   }
 
-  // Weltposition der Zellmitte auf Hoehe der Flaeche
+  /** World position of the cell center, at the height of the node's surface. */
   public centerOf(node: NavNode): { x: number; y: number; z: number } {
     return {
       x: node.col * this.tileSize + this.tileSize / 2,
@@ -84,6 +110,7 @@ export class NavGrid {
     }
   }
 
+  /** All nodes reachable from `node` in one step, with their cost. */
   public neighbors(node: NavNode): NavEdge[] {
     const edges: NavEdge[] = []
     for (const [dCol, dRow] of DIRECTIONS) {
@@ -100,7 +127,7 @@ export class NavGrid {
     const diagonal: boolean = dCol !== 0 && dRow !== 0
 
     if (from.stair || to.stair) {
-      // Stiegen nur entlang ihrer Achse betreten, verlassen und begehen
+      // Stairs are only entered, left and walked along their axis
       if (diagonal) return false
       if (from.stair && !isAlongAxis(from.stair, dCol, dRow)) return false
       if (to.stair && !isAlongAxis(to.stair, dCol, dRow)) return false
@@ -114,12 +141,14 @@ export class NavGrid {
 
     if (!sameHeight(from.y, to.y)) return false
     if (!diagonal) return true
-    // Keine Ecken schneiden: beide Nachbarn muessen Flaechen derselben Hoehe sein
+    // No corner cutting: both orthogonal neighbors must be surfaces of the same height
     return this.hasFlatNode(from.col + dCol, from.row, from.y) && this.hasFlatNode(from.col, from.row + dRow, from.y)
   }
 
-  // Schritt von einem Stiegen-Tile auf eine Flaeche: nur am unteren Ende auf baseY
-  // oder am oberen Ende auf topY
+  /**
+   * Whether a step from a stair tile onto a surface is allowed: only at the
+   * lower end onto `baseY` or at the upper end onto `topY`.
+   */
   private leavesStair(stairNode: NavNode, surface: NavNode, dCol: number, dRow: number): boolean {
     const stair: StairData = stairNode.stair!
     const up: { dCol: number; dRow: number } = stair.upStep
@@ -137,9 +166,11 @@ export class NavGrid {
     return this.nodesAt(col, row).some((n: NavNode): boolean => !n.stair && sameHeight(n.y, y))
   }
 
-  // Jede Oberseite eines Blocks ist ein Kandidat. Begehbar ist sie, wenn darueber
-  // NAV_HEADROOM frei ist - geprueft gegen ein um ENEMY_RADIUS vergroessertes Feld,
-  // damit Gegner nicht an Kanten haengen bleiben.
+  /**
+   * Every block top is a candidate. It is walkable if `NAV_HEADROOM` above it is
+   * free - checked against an area grown by `ENEMY_RADIUS`, so enemies do not
+   * get stuck on edges.
+   */
   private addSurfaceNodes(solids: Volume[], obstacles: Volume[]): void {
     if (solids.length === 0) return
     const bounds: Volume[] = obstacles
@@ -168,6 +199,7 @@ export class NavGrid {
     }
   }
 
+  /** Whether any obstacle intrudes into the headroom above (cx, y, cz). */
   private isBlocked(obstacles: Volume[], cx: number, cz: number, y: number): boolean {
     const r: number = ENEMY_RADIUS
     return obstacles.some((o: Volume): boolean =>
@@ -207,7 +239,7 @@ function isAlongAxis(stair: StairData, dCol: number, dRow: number): boolean {
   return isHorizontalStair(stair.dir) ? dCol !== 0 && dRow === 0 : dCol === 0 && dRow !== 0
 }
 
-// Jedes Stiegen-Tile ist ein Block vom unteren Ende bis zu seiner Oberkante
+/** Every stair tile is a block from the stair's lower end up to the tile's top edge. */
 function stairTileVolumes(stair: StairData, tileSize: number): Volume[] {
   const tileHeight: number = STAIR_COUNT * STAIR_HEIGHT
   return stair.tiles().map(({ col, row, index }): Volume => ({
