@@ -1,12 +1,13 @@
 import * as THREE from 'three'
-import { ENEMY_HP } from '../GameConstants'
+import { ENEMY_HP, ENEMY_RADIUS, ENEMY_BASE_HEIGHT } from '../GameConstants'
 import { loadPixelTexture } from '../core/AssetLoader'
 import { StateMachine } from '../states/StateMachine'
 import {EnemyState} from '../states/EnemyState'
 import { EnemyAI } from './enemyAI/EnemyAI'
-import { Damageable, UpdateContext, DamageGroup } from '../types'
+import { Damageable, UpdateContext, DamageGroup, ColliderBox } from '../types'
 import { Entity } from './Entity'
 import { Projectile } from './Projectile'
+import { PhysicsBody } from '../physics/Physics'
 
 const COLOR_ALIVE    = 0xffffff
 const COLOR_DEAD     = 0x555555
@@ -16,9 +17,11 @@ const FLASH_DURATION = 0.12
 // Sprite-Sheet: 102 frames horizontal in RoboOrginalNew.png
 const TOTAL_FRAMES = 102
 
-export class Enemy implements Entity, Damageable {
+export class Enemy implements Entity, Damageable, PhysicsBody {
   public mesh: THREE.Sprite
   public position: THREE.Vector3
+  readonly baseHeight: number = ENEMY_BASE_HEIGHT
+  velocityY: number = 0
   readonly yMin: number
   readonly yMax: number
   private hp = ENEMY_HP
@@ -38,8 +41,10 @@ export class Enemy implements Entity, Damageable {
   readonly attackCooldown; // Sekunden zwischen Angriffen
   private cooldownTimer; // Timer für den Angriff
 
+  private colliderBox: ColliderBox
+
   constructor(x: number, z: number, attackCooldown = 0.3) {
-    this.position = new THREE.Vector3(x, 0.4, z)
+    this.position = new THREE.Vector3(x, this.baseHeight, z)
     this.yMin = 0
     this.yMax = 1.4
     const mat = new THREE.SpriteMaterial({ color: COLOR_ALIVE, alphaTest: 0.5 })
@@ -49,6 +54,17 @@ export class Enemy implements Entity, Damageable {
     this.enemyAI = new EnemyAI(this);
     this.cooldownTimer = attackCooldown;
     this.attackCooldown = attackCooldown;
+
+
+    this.colliderBox = {
+      minX: -ENEMY_RADIUS,
+      maxX: ENEMY_RADIUS,
+      minZ: -ENEMY_RADIUS,
+      maxZ: ENEMY_RADIUS,
+      // position.y liegt auf ENEMY_BASE_HEIGHT - die Box reicht von den Fuessen bis dorthin
+      minY: -ENEMY_BASE_HEIGHT,
+      maxY: 0
+    }
 
     loadPixelTexture('./sprites/enemies/RoboOrginalNew.png').then(tex => {
       // Der Enemy kann waehrend des Ladens schon disposed worden sein
@@ -225,7 +241,7 @@ export class Enemy implements Entity, Damageable {
         damage: 10,
         spawnOffset: new THREE.Vector3(toPlayer.x, 0, toPlayer.z),
         shootDir: toPlayer,
-        speed: 50,
+        speed: 70,
         projectileColor: 0xdb4646,
         damageGroup: DamageGroup.Player
       })
@@ -256,6 +272,10 @@ export class Enemy implements Entity, Damageable {
     this.activity = activity
   }
 
+  public getColliderBox(): ColliderBox {
+    return this.colliderBox;
+  }
+
   public dispose() {
     if (this.disposed) return
     this.disposed = true
@@ -265,5 +285,9 @@ export class Enemy implements Entity, Damageable {
     this.mesh.removeFromParent()
     // mesh.geometry NICHT disposen - THREE.Sprite teilt sich eine globale Geometrie
     this.mesh.material.dispose()
+  }
+
+  public getPosition(): THREE.Vector3 {
+    return this.position;
   }
 }

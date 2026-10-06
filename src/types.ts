@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { Projectile } from "./entities/Projectile"
 import { Player } from "./entities/Player"
 import { GameField } from "./world/GameField"
+import type { StairData } from "./world/StairData"
 
 
 export interface ColliderBox {
@@ -10,6 +11,9 @@ export interface ColliderBox {
   maxX: number
   minZ: number
   maxZ: number
+
+  minY: number
+  maxY: number
 }
 
 export interface ParsedMap {
@@ -20,6 +24,7 @@ export interface ParsedMap {
   rows: number
   cols: number
   walkableTiles: Array<{ x: number; z: number }>
+  stairs: Array<StairData>
 }
 
 export interface Damageable {

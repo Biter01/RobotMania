@@ -2,14 +2,27 @@ import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { ColliderBox } from '../types'
 import { Enemy } from '../entities/Enemy'
-import { TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK } from '../GameConstants'
+import {
+  TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK,
+  STAIR_COUNT, STAIR_WIDTH, STAIR_HEIGHT, COLOR_STAIR,
+} from '../GameConstants'
 import { parseMap } from './Map'
 import { ParsedMap } from '../types'
 import { loadPixelTexture } from '../core/AssetLoader'
 import { WALL_TILES, WallTile, DEFAULT_WALL_UV_SCALE } from './WallTiles'
+import { StairData, StairDir, buildStairColliders } from './StairData'
+import { PhysicsWorld } from '../physics/Physics'
+
+// Die Stiegen-Geometrie wird lokal Richtung -z ansteigend gebaut ('^') und dann gedreht
+const STAIR_ROTATION: Record<StairDir, number> = {
+  '^': 0,
+  '<': Math.PI / 2,
+  'v': Math.PI,
+  '>': -Math.PI / 2,
+}
 
 //Singleton class that represents the game field, including walls, floor, and enemies
-export class GameField {
+export class GameField implements PhysicsWorld {
   readonly colliders: ColliderBox[] = []
   readonly enemies: Enemy[] = []
   readonly playerSpawn: { x: number; z: number }
@@ -24,6 +37,8 @@ export class GameField {
   private meshes: THREE.Mesh[] = []
   private parsed: ParsedMap
   private walkableSet: Set<string>
+  // "col,row" -> Stiege; alle Tiles einer zusammengesetzten Stiege zeigen auf dieselbe StairData
+  private stairLookup: Map<string, StairData> = new Map()
   private pending: Promise<void>[] = []
   private textures: THREE.Texture[] = []
   private disposed: boolean = false
@@ -36,6 +51,8 @@ export class GameField {
     this.tileMap = current_level
     this.meshes.push(this.buildFloor())
     this.meshes.push(...this.buildWallBlocks())
+    const stairMesh: THREE.Mesh | null = this.buildStairs()
+    if (stairMesh) this.meshes.push(stairMesh)
     this.buildEnemies()
 
     for (const mesh of this.meshes) {
@@ -62,6 +79,17 @@ export class GameField {
     const w = this.parsed.cols * TILE_SIZE
     const d = this.parsed.rows * TILE_SIZE
     const geo = new THREE.PlaneGeometry(w, d)
+    
+    this.colliders.push({
+        minX: 0,
+        maxX: w,
+        minZ: 0,
+        maxZ: d,  
+
+        minY: -1,
+        maxY: 0
+      })
+
     geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2))
     geo.applyMatrix4(new THREE.Matrix4().makeTranslation(w / 2, 0, d / 2))
     const mat = new THREE.MeshLambertMaterial({ color: COLOR_FLOOR })
@@ -82,6 +110,8 @@ export class GameField {
         maxX: x + BLOCK_HALF_SIZE,
         minZ: z - BLOCK_HALF_SIZE,
         maxZ: z + BLOCK_HALF_SIZE,
+        minY: 0,
+        maxY: WALL_HEIGHT
       })
 
       const group: THREE.BufferGeometry[] | undefined = geosByTile.get(tile)
@@ -137,6 +167,45 @@ export class GameField {
     return mesh
   }
 
+  // Alle Stufen aller Stiegen in einem gemergten Mesh. Jede Stufe ist ein Block vom
+  // Boden bis zu ihrer Hoehe; zusammengesetzte Stiegen bauen auf dem vorigen Tile auf.
+  private buildStairs(): THREE.Mesh | null {
+    const geos: THREE.BufferGeometry[] = []
+
+    for (const stair of this.parsed.stairs) {
+      for (const { col, row, index } of stair.tiles()) {
+        this.stairLookup.set(`${col},${row}`, stair)
+
+        const x: number = col * TILE_SIZE + TILE_SIZE / 2
+        const z: number = row * TILE_SIZE + TILE_SIZE / 2
+        for (let s = 1; s <= STAIR_COUNT; s++) {
+          const height: number = STAIR_HEIGHT * (index * STAIR_COUNT + s)
+          const geo = new THREE.BoxGeometry(TILE_SIZE, height, STAIR_WIDTH)
+          // Lokal: Stufe 1 an der +z-Kante des Tiles, letzte Stufe an der -z-Kante
+          const localZ: number = TILE_SIZE / 2 - STAIR_WIDTH * (s - 0.5)
+          geo.translate(0, height / 2, localZ)
+          geo.rotateY(STAIR_ROTATION[stair.dir])
+          geo.translate(x, 0, z)
+          geos.push(geo)
+        }
+      }
+    }
+    this.colliders.push(...buildStairColliders(this.parsed.stairs))
+
+    if (geos.length === 0) return null
+    const mesh = new THREE.Mesh(mergeGeometries(geos), new THREE.MeshLambertMaterial({ color: COLOR_STAIR }))
+    for (const geo of geos) geo.dispose()
+    return mesh
+  }
+
+  public getStairAt(x: number, z: number): StairData | undefined {
+    return this.stairLookup.get(`${Math.floor(x / TILE_SIZE)},${Math.floor(z / TILE_SIZE)}`)
+  }
+
+  public getTileChar(col: number, row: number): string | undefined {
+    return this.tileMap[row]?.[col]
+  }
+
   private buildEnemies() {
     for (const { x, z } of this.parsed.enemySpawns) {
       this.enemies.push(new Enemy(x, z))
@@ -176,5 +245,6 @@ export class GameField {
     this.enemies.length = 0
     this.textures.length = 0
     this.pending.length = 0
+    this.stairLookup.clear()
   }
 }

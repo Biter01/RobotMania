@@ -3,12 +3,10 @@ import { ColliderBox, UpdateContext, DamageGroup } from '../types'
 import { ENEMY_RADIUS, PLAYER_RADIUS } from '../GameConstants'
 import { Entity } from './Entity'
 import { Enemy } from './Enemy'
-
-
+import {Physics} from '../physics/Physics'
 
 const PROJECTILE_LIFETIME = 3.0
 const PROJECTILE_MESH_RADIUS = 0.08
-
 
 interface ProjectileGeometry {
   ox: number
@@ -17,36 +15,6 @@ interface ProjectileGeometry {
   dx: number 
   dy: number 
   dz: number // Movement Vector sphere
-}
-
-
-function segmentHitsBox(proGeo: ProjectileGeometry, box: ColliderBox): boolean {
-  let tmin = 0
-  let tmax = 1
-  
-  if (Math.abs(proGeo.dx) < 1e-9) {
-    if (proGeo.ox < box.minX || proGeo.ox > box.maxX) return false
-  } else {
-    let t1 = (box.minX - proGeo.ox) / proGeo.dx
-    let t2 = (box.maxX - proGeo.ox) / proGeo.dx
-    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp }
-    tmin = Math.max(tmin, t1)
-    tmax = Math.min(tmax, t2)
-    if (tmin > tmax) return false
-  }
-
-  if (Math.abs(proGeo.dz) < 1e-9) {
-    if (proGeo.oz < box.minZ || proGeo.oz > box.maxZ) return false
-  } else {
-    let t1 = (box.minZ - proGeo.oz) / proGeo.dz
-    let t2 = (box.maxZ - proGeo.oz) / proGeo.dz
-    if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp }
-    tmin = Math.max(tmin, t1)
-    tmax = Math.min(tmax, t2)
-    if (tmin > tmax) return false
-  }
-
-  return true
 }
 
 function segmentHitsCircle(
@@ -129,9 +97,13 @@ export class Projectile implements Entity {
   private prev = new THREE.Vector3()
   private group: DamageGroup
 
+  private colliderBox: ColliderBox
+
   constructor(config: ProjectileConfig) {
     this.position = config.spawnPosition.clone().add(config.spawnOffset)
-    this.prev.copy(this.position)
+    // Der erste Sweep startet beim Schuetzen, nicht beim Spawn: liegt der Spawn-Offset
+    // in oder hinter einer Wand, wird das so als Wandtreffer erkannt.
+    this.prev.copy(config.spawnPosition)
     this.damage = config.damage
 
     const dir = config.shootDir.clone().normalize()
@@ -142,6 +114,15 @@ export class Projectile implements Entity {
     this.mesh = new THREE.Mesh(geo, mat)
     this.mesh.position.copy(this.position)
     this.group = config.damageGroup
+
+    this.colliderBox = {
+      minX: -PROJECTILE_MESH_RADIUS,
+      maxX: PROJECTILE_MESH_RADIUS,
+      minZ: -PROJECTILE_MESH_RADIUS,
+      maxZ: PROJECTILE_MESH_RADIUS,
+      minY: -PROJECTILE_MESH_RADIUS,
+      maxY: PROJECTILE_MESH_RADIUS
+    }
   }
 
   update(dt: number, ctx: UpdateContext) {
@@ -151,29 +132,29 @@ export class Projectile implements Entity {
       return
     }
 
-    this.prev.copy(this.position)
     this.position.addScaledVector(this.velocity, dt)
-    this.mesh.position.copy(this.position)
 
-    
+    // Fruehester Wandkontakt auf der Strecke prev -> position. Die Flugbahn endet dort,
+    // damit weder Gegner hinter der Wand getroffen noch Gegner davor uebersprungen werden.
+    const tWall: number | null = Physics.getInstance().sweep(ctx.field.colliders, this.prev, this.position, this.getColliderBox())
+    const reach: number = tWall ?? 1
 
-    const proGeo: ProjectileGeometry = { 
+    const proGeo: ProjectileGeometry = {
         ox:  this.prev.x,
         oy: this.prev.y,
         oz: this.prev.z,
-        dx: this.position.x - this.prev.x,
-        dy: this.position.y - this.prev.y,
-        dz: this.position.z - this.prev.z
+        dx: (this.position.x - this.prev.x) * reach,
+        dy: (this.position.y - this.prev.y) * reach,
+        dz: (this.position.z - this.prev.z) * reach
     }
 
+    if (tWall !== null) {
+      this.alive = false
+      this.position.set(proGeo.ox + proGeo.dx, proGeo.oy + proGeo.dy, proGeo.oz + proGeo.dz)
 
-    for (const box of ctx.field.colliders) {
-      if (segmentHitsBox(proGeo, box)) {
-        this.alive = false
-        return
-      }
     }
-
+    
+    this.mesh.position.copy(this.position)
 
     if(this.group == DamageGroup.Enemy) {
         for (const enemy of ctx.field.enemies) {
@@ -190,6 +171,8 @@ export class Projectile implements Entity {
           this.alive = false
         }
     }
+
+    this.prev.copy(this.position)
   }
 
   private playerIsHit(
@@ -206,6 +189,14 @@ export class Projectile implements Entity {
       enemy: Enemy
   ): boolean {  
     return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)
+  }
+
+  public getColliderBox(): ColliderBox {
+    return this.colliderBox;
+  }
+
+  public getPosition(): THREE.Vector3 {
+    return this.position;
   }
 
   dispose() {

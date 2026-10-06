@@ -14,9 +14,11 @@ import { AstarPathfinding } from './AstarPathfinding'
  * GameField -> Enemy -> AssetLoader graph from ever loading.
  */
 let isWalkableImpl: (x: number, z: number) => boolean = (): boolean => true
+let tileRows: string[] = []
 
 const gameField: GameField = {
   isTileWalkable: (x: number, z: number): boolean => isWalkableImpl(x, z),
+  getTileChar: (x: number, z: number): string | undefined => tileRows[z]?.[x],
 } as unknown as GameField
 
 // ---------------------------------------------------------------------------
@@ -33,11 +35,13 @@ function useGrid(rows: string[]): void {
     parseMap(rows, TILE_SIZE).walkableTiles.map((t): string => `${t.x},${t.z}`)
   )
   isWalkableImpl = (x: number, z: number): boolean => walkable.has(`${x},${z}`)
+  tileRows = rows
 }
 
 /** Marks every tile walkable, including negative coordinates. */
 function useOpenWorld(): void {
   isWalkableImpl = (): boolean => true
+  tileRows = []
 }
 
 /** Grid cell -> world-space centre, matching Map.ts:14-15 and EnemyAI.ts:161-165. */
@@ -630,10 +634,9 @@ describe('optimality under octile costs', () => {
 
 describe('no diagonal corner cutting', () => {
   /**
-   * Enemies have no wall collision of their own -- EnemyAI.moveTowards moves
-   * straight at the next tile centre and GameField.colliders is only consulted
-   * by Player and Projectile. So a diagonal that clips a wall corner is visible
-   * in game as a sprite walking through masonry. exploreNeighbors
+   * EnemyAI.moveTowards moves straight at the next tile centre through
+   * Physics.computePhysics, so a diagonal that clips a wall corner would get the
+   * enemy stuck on the wall collider. exploreNeighbors
    * (AstarPathfinding.ts:119-124) therefore requires both orthogonal tiles of a
    * diagonal to be free.
    */
@@ -678,5 +681,100 @@ describe('no diagonal corner cutting', () => {
       [1, 2],
       [2, 2],
     ])
+  })
+})
+
+describe('stairs', () => {
+  /**
+   * Stairs count as floor for the heuristic, but may only be entered and left
+   * along their axis (from either end), never sideways or diagonally.
+   */
+  it('does not enter a stair from the side', () => {
+    useGrid([
+      '...',
+      '.>.',
+      '...',
+    ])
+
+    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
+      worldCentre(1, 0),
+      worldCentre(1, 1),
+      gameField
+    )
+
+    assertValidPath(path, [1, 0], [1, 1])
+    expect(path).toHaveLength(4)
+    const before: THREE.Vector2 = path[path.length - 2]
+    expect(before.y).toBe(1)
+  })
+
+  it('does not leave a stair sideways', () => {
+    useGrid([
+      '...',
+      '.^.',
+      '...',
+    ])
+
+    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
+      worldCentre(1, 1),
+      worldCentre(0, 1),
+      gameField
+    )
+
+    assertValidPath(path, [1, 1], [0, 1])
+    expect(path).toHaveLength(4)
+    expect(path[1].x).toBe(1)
+  })
+
+  it('walks along a composed stair', () => {
+    useGrid([
+      '####',
+      '.>>.',
+      '####',
+    ])
+
+    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
+      worldCentre(0, 1),
+      worldCentre(3, 1),
+      gameField
+    )
+
+    expect(tuples(path)).toEqual([
+      [0, 1],
+      [1, 1],
+      [2, 1],
+      [3, 1],
+    ])
+  })
+
+  it('walks up a vertical stair from either end', () => {
+    useGrid([
+      '#.#',
+      '#^#',
+      '#^#',
+      '#.#',
+    ])
+
+    const up: THREE.Vector2[] = new AstarPathfinding().findPath(worldCentre(1, 3), worldCentre(1, 0), gameField)
+    const down: THREE.Vector2[] = new AstarPathfinding().findPath(worldCentre(1, 0), worldCentre(1, 3), gameField)
+
+    expect(up).toHaveLength(4)
+    expect(down).toHaveLength(4)
+  })
+
+  it('does not connect stairs of different direction', () => {
+    useGrid([
+      '####',
+      '.<>.',
+      '####',
+    ])
+
+    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
+      worldCentre(0, 1),
+      worldCentre(3, 1),
+      gameField
+    )
+
+    expect(path).toEqual([])
   })
 })
