@@ -10,6 +10,7 @@ import { ScanlineShader } from '../shaders/ScanlineShader'
 import { DamageFlashShader } from '../shaders/DamageFlashShader'
 
 import { EnemyFacingDebug } from '../entities/enemyAI/EnemyFacingDebug'
+import { ColliderDebug } from '../physics/ColliderDebug'
 import {
   COLOR_SKY,
   AMBIENT_INTENSITY, DIR_LIGHT_INTENSITY,
@@ -36,6 +37,7 @@ export class Game {
   private player!: Player
   private field!: GameField
   private enemyFacingDebug?: EnemyFacingDebug
+  private colliderDebug?: ColliderDebug
   private projectiles: Projectile[] = []
   private lastTime = 0
   private fps = 0
@@ -176,7 +178,8 @@ private createContext(): UpdateContext {
 
     // disposeWorld() hat die Debug-Pfeile mitgenommen - bei aktivem Debug neu
     // aufbauen, damit der Tab-Toggle nach einem Retry nicht aus dem Tritt geraet.
-    if (this.debug) this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
+    // Die statischen Collider haengen am Level - deshalb auch ColliderDebug neu bauen.
+    if (this.debug) {this.createDebugHelpers()}
 
     // Beide Ready-Promises: sonst blitzen im ersten Frame graue Waende auf.
     await Promise.all([this.player.isReady(), this.field.isReady()])
@@ -236,6 +239,8 @@ private createContext(): UpdateContext {
     this.player.update(dt, this.ctx)
     this.updateEnemies(dt);
     this.updateProjectiles(dt, this.ctx)
+    // Nach den Projektilen: neue/geloeschte Geschosse sind sonst einen Step verspaetet
+    this.colliderDebug?.update(this.field.enemies, this.projectiles)
     this.updateHud()
   }
 
@@ -268,13 +273,24 @@ private createContext(): UpdateContext {
     this.player.setInvincible(true);
 
     if( this.debug) {
-      this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
+      this.createDebugHelpers()
     } else {
-      this.enemyFacingDebug?.dispose()
-      this.enemyFacingDebug = undefined
+      this.disposeDebugHelpers()
 
       this.player.setInvincible(false);
     }
+  }
+
+  private createDebugHelpers(): void {
+    this.enemyFacingDebug = new EnemyFacingDebug(this.scene)
+    this.colliderDebug = new ColliderDebug(this.scene, this.field.colliders)
+  }
+
+  private disposeDebugHelpers(): void {
+    this.enemyFacingDebug?.dispose()
+    this.enemyFacingDebug = undefined
+    this.colliderDebug?.dispose()
+    this.colliderDebug = undefined
   }
 
    private updateProjectiles(dt: number, ctx: UpdateContext) : void {
@@ -297,9 +313,8 @@ private createContext(): UpdateContext {
     }
     this.projectiles.length = 0
 
-    // Die Map<Enemy, ArrowHelper> haelt sonst Referenzen auf disposte Enemies.
-    this.enemyFacingDebug?.dispose()
-    this.enemyFacingDebug = undefined
+    // Die Debug-Maps halten sonst Referenzen auf disposte Enemies/Projektile.
+    this.disposeDebugHelpers()
 
     // init() lief evtl. nie (dispose aus dem MENU-State)
     this.field?.dispose()

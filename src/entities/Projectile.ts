@@ -126,7 +126,7 @@ export class Projectile implements Entity {
   private prev = new THREE.Vector3()
   private group: DamageGroup
 
-  private colliderBox: { minX: number; maxX: number; minZ: number; maxZ: number } 
+  private colliderBox: ColliderBox
 
   constructor(config: ProjectileConfig) {
     this.position = config.spawnPosition.clone().add(config.spawnOffset)
@@ -146,7 +146,9 @@ export class Projectile implements Entity {
       minX: -PROJECTILE_MESH_RADIUS,
       maxX: PROJECTILE_MESH_RADIUS,
       minZ: -PROJECTILE_MESH_RADIUS,
-      maxZ: PROJECTILE_MESH_RADIUS
+      maxZ: PROJECTILE_MESH_RADIUS,
+      minY: -PROJECTILE_MESH_RADIUS,
+      maxY: PROJECTILE_MESH_RADIUS
     }
   }
 
@@ -180,7 +182,7 @@ export class Projectile implements Entity {
       }
     }*/
 
-    if(Physics.getInstance().checkWallCollision(ctx.field.colliders, this.position, this.getColliderBox())) {
+    if(Physics.getInstance().checkWallCollision(ctx.field.colliders, this.prev, this.position, this.getColliderBox())) {
       this.alive = false
       return
     }
@@ -219,7 +221,7 @@ export class Projectile implements Entity {
     return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)
   }
 
-  public getColliderBox(): { minX: number; maxX: number; minZ: number; maxZ: number } {
+  public getColliderBox(): ColliderBox {
     return this.colliderBox;
   }
 

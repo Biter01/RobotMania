@@ -125,7 +125,7 @@ export class EnemyAI {
 
     private canMove(colliders: ColliderBox[], direction: THREE.Vector3, speed: number, dt: number): boolean {
         
-        return !Physics.getInstance().checkWallCollision(colliders, this.enemy.position.clone().addScaledVector(direction, speed * dt), this.enemy.getColliderBox())
+        return !Physics.getInstance().checkWallCollision(colliders, this.enemy.position, this.enemy.position.clone().addScaledVector(direction, speed * dt), this.enemy.getColliderBox())
         
         /*return !colliders.some(b => this.enemy.position.x + direction.x * speed * dt + ENEMY_RADIUS > b.minX &&
                 this.enemy.position.x + direction.x * speed * dt - ENEMY_RADIUS < b.maxX &&

@@ -79,6 +79,17 @@ export class GameField implements PhysicsWorld {
     const w = this.parsed.cols * TILE_SIZE
     const d = this.parsed.rows * TILE_SIZE
     const geo = new THREE.PlaneGeometry(w, d)
+    
+    this.colliders.push({
+        minX: 0,
+        maxX: w,
+        minZ: 0,
+        maxZ: d,  
+
+        minY: -1,
+        maxY: 0
+      })
+
     geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2))
     geo.applyMatrix4(new THREE.Matrix4().makeTranslation(w / 2, 0, d / 2))
     const mat = new THREE.MeshLambertMaterial({ color: COLOR_FLOOR })
@@ -99,6 +110,8 @@ export class GameField implements PhysicsWorld {
         maxX: x + BLOCK_HALF_SIZE,
         minZ: z - BLOCK_HALF_SIZE,
         maxZ: z + BLOCK_HALF_SIZE,
+        minY: 0,
+        maxY: WALL_HEIGHT
       })
 
       const group: THREE.BufferGeometry[] | undefined = geosByTile.get(tile)

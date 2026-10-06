@@ -11,6 +11,9 @@ export interface ColliderBox {
   maxX: number
   minZ: number
   maxZ: number
+
+  minY: number
+  maxY: number
 }
 
 export interface ParsedMap {
