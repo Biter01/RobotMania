@@ -5,7 +5,7 @@ import { UIRenderer } from './ui/UIRenderer'
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
 
-import {LEVEL_1 } from "./world/MapData"
+import { LEVEL_1 } from "./world/levels/Level1"
 
 // Genau EIN WebGL-Context fuer die gesamte Session. renderer.dispose() gibt den
 // Context nicht frei, ein Renderer pro Game wuerde sie also aufstauen.

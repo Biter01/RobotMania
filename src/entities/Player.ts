@@ -36,9 +36,10 @@ export class Player implements Entity, Damageable, PhysicsBody {
   velocityY: number = 0
   private static readonly _velocity = new THREE.Vector3()
 
-  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2) {
+  // spawnFootY = Hoehe der Fuesse am Spawn (Oberseite des Blocks darunter)
+  constructor(camera: THREE.PerspectiveCamera, spawnX = 2, spawnZ = 2, spawnFootY = 0) {
     this.camera = camera
-    this.position = new THREE.Vector3(spawnX, PLAYER_EYE_HEIGHT, spawnZ)
+    this.position = new THREE.Vector3(spawnX, spawnFootY + PLAYER_EYE_HEIGHT, spawnZ)
     this.yaw = Math.PI
     this.camera.position.copy(this.position)
     this.weapon = new Pistol(this.camera)

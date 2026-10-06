@@ -1,22 +1,18 @@
-import { TILE_SIZE, WALL_HEIGHT } from '../GameConstants'
+import { COLOR_FLOOR } from '../GameConstants'
 
 export interface WallTile {
-  texture: string
+  // Ohne Textur wird der Block nur in color eingefaerbt
+  texture?: string
   color?: number
-  // Kachelung pro Box-Face. Default unten haelt die Pixel quadratisch.
+  // Wiederholungen der Textur pro TILE_SIZE (die Block-UVs sind schon auf die
+  // Blockgroesse skaliert, siehe GameField.scaleBoxUVs)
   uvScale?: { x: number; y: number }
 }
 
-export const DEFAULT_WALL_UV_SCALE: { x: number; y: number } = {
-  x: 1,
-  y: WALL_HEIGHT / TILE_SIZE,
-}
+export const DEFAULT_WALL_UV_SCALE: { x: number; y: number } = { x: 1, y: 1 }
 
-
+// Blocktypen: der Schluessel steht im Level als BlockObject.tile
 export const WALL_TILES: Record<string, WallTile> = {
-  '#': { texture: './sprites/tiles/BrickWall.png' },
-}
-
-export function isWallChar(ch: string): boolean {
-  return Object.prototype.hasOwnProperty.call(WALL_TILES, ch)
+  brick: { texture: './sprites/tiles/BrickWall.png' },
+  floor: { color: COLOR_FLOOR },
 }

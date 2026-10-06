@@ -16,7 +16,8 @@ export interface PhysicsBody {
 // Was computePhysics vom Spielfeld braucht - GameField erfuellt das
 export interface PhysicsWorld {
     readonly colliders: ColliderBox[]
-    getStairAt(x: number, z: number): StairData | undefined
+    // footY = Hoehe der Fuesse - bei uebereinanderliegenden Stiegen entscheidet sie, welche gemeint ist
+    getStairAt(x: number, z: number, footY: number): StairData | undefined
 }
 
 // Entity-Collider sind relativ zur position gespeichert - hier in Weltkoordinaten umrechnen.
@@ -146,16 +147,17 @@ export class Physics {
     // oben raus -> Stiegenhoehe, von dort uebernimmt die Gravitation. Gibt zurueck, ob body auf einer Stiege steht.
     private stairMovement(body: PhysicsBody, world: PhysicsWorld, oldX: number, oldZ: number): boolean {
         const { x, z } = body.position
-        const stair: StairData | undefined = world.getStairAt(x, z)
+        const footY: number = body.position.y - body.baseHeight
+        const stair: StairData | undefined = world.getStairAt(x, z, footY)
         if (stair) {
-            body.position.y = body.baseHeight + stair.heightAt(x, z) + STAIR_HEIGHT_OFFSET
+            body.position.y = body.baseHeight + stair.baseY + stair.heightAt(x, z) + STAIR_HEIGHT_OFFSET
             return true
         }
 
         // In diesem Frame verlassen: heightAt klemmt auf 0 bzw. HEIGHT
-        const prev: StairData | undefined = world.getStairAt(oldX, oldZ)
+        const prev: StairData | undefined = world.getStairAt(oldX, oldZ, footY)
         if (prev) {
-            body.position.y = body.baseHeight + prev.heightAt(x, z)
+            body.position.y = body.baseHeight + prev.baseY + prev.heightAt(x, z)
         }
         return false
     }

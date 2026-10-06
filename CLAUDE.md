@@ -30,10 +30,14 @@ src/
 │   ├── InputManager.ts  # Tastatur + Maus Input
 │   └── AssetLoader.ts   # Texturen & Sprite-Sheets laden
 ├── world/
-│   ├── Map.ts           # parseMap: ASCII-Level → Wände/Spawns/Walkables
-│   ├── MapData.ts       # Level-Daten als string[] (LEVEL_1, LEVEL_2, EXTREM, EXTREM2)
-│   ├── WallTiles.ts     # Registry: Map-Zeichen → Wand-Textur
-│   └── GameField.ts     # Baut Boden-, Wand- und Gegner-Objekte der Szene
+│   ├── LevelData.ts     # Level-Format: frei platzierte Objekte in x/y/z (block, stair, player, enemy)
+│   ├── levels/          # Levels als LevelData (Level1, Level2, Extrem, Extrem2, Demo3D)
+│   ├── Map.ts           # parseLevel: LevelData → Blöcke/Stiegen/Spawns
+│   ├── NavGrid.ts       # Ebenen-Nav-Grid: begehbare Flächen pro Zelle und Höhe, Stiegen verbinden Ebenen
+│   ├── StairData.ts     # Stiegen (Tile-Bereich + baseY), Höhenverlauf, Seiten-Collider
+│   ├── WallTiles.ts     # Registry: Blocktyp → Textur/Farbe
+│   ├── testing/         # gridLevel(): ASCII → LevelData, nur für Test-Fixtures
+│   └── GameField.ts     # Baut Blöcke, Stiegen, Gegner und das NavGrid der Szene
 ├── entities/
 │   ├── Player.ts        # Bewegung, Kamera, Gesundheit
 │   ├── Enemy.ts         # AI, Sprite-Animation
@@ -56,7 +60,7 @@ Assets:
 public/sprites/
 ├── enemies/   # RoboOrginalNew.png (Spritesheet horizontal, 102 Frames × 128px)
 ├── weapons/   # waffe2.png
-└── tiles/     # BrickWall.png (Wand-Textur, via WallTiles.ts registriert)
+└── tiles/     # BrickWall.png (Block-Textur 'brick', via WallTiles.ts registriert)
 ```
 
 ## Code Conventions
@@ -65,8 +69,9 @@ public/sprites/
 - **Texturen laden:** immer über `loadPixelTexture()` (`core/AssetLoader.ts`) – cached, klont pro Instanz. Welt-Geometrie (Wand-Tiles) nutzt `{ mipmaps: true }` gegen Flimmern auf Distanz; Sprites/HUD bleiben ohne Mipmaps.
 - **Sprites:** `alphaTest = 0.5` für PNG-Transparenz
 - **Sprite-Animation:** UV-Offset (`texture.offset.x`, `texture.repeat.x`) statt Spritesheet-Slicing
-- **Level-Format:** `string[]`, eine Zeile pro Grid-Reihe – `.` = Boden, `P` = Spieler-Spawn, `E` = Gegner-Spawn, `#` = Wand
-- **Wand-Tiles:** Wände werden **nicht** auf `#` hartkodiert. `world/WallTiles.ts` mappt Map-Zeichen → Textur; jedes registrierte Zeichen wird automatisch solide, nicht begehbar und bekommt ein eigenes gemergtes Mesh. Neuer Wandtyp = ein Registry-Eintrag, kein weiterer Code.
+- **Level-Format:** `LevelData` (`world/LevelData.ts`) – eine Objektliste in Welt-Koordinaten, y zeigt nach oben. `block` = achsparalleler Quader (`position` = Mittelpunkt, `size` in x/y/z); Böden, Wände, Plattformen und Brücken sind alles Blöcke, es gibt **keinen automatischen Boden**. `stair` liegt mit x/z auf dem Tile-Raster, y = unteres Ende. Spawns: y = Höhe der Füße.
+- **Ebenen & Wegfindung:** Jede Block-Oberseite mit `NAV_HEADROOM` Freiraum wird begehbar (`NavGrid`). Knoten gleicher Höhe sind verbunden; **Stiegen sind die einzige Verbindung zwischen Ebenen** (kein Springen/Fallen im A*). Das obere Stiegenende braucht eine Fläche auf genau `topY`.
+- **Blocktypen:** `world/WallTiles.ts` mappt `BlockObject.tile` → Textur oder Farbe (`brick`, `floor`). Neuer Blocktyp = ein Registry-Eintrag. Block-UVs werden auf die Blockgröße skaliert, die Textur wiederholt sich pro `TILE_SIZE`.
 - **Asset-Lifecycle:** Texturen gehören dem Erzeuger – im `.then()` auf `this.disposed` prüfen und in `dispose()` explizit freigeben (Materials geben ihre `map` nicht mit frei).
 - **Gegner-AI:** `idle → chase (dist < 10) → attack (dist < 1.5)`; gleiche AABB-Kollision wie Spieler
 - Kein Anti-Aliasing, kein Weichzeichnen – bewusster Retro-Look

@@ -4,6 +4,7 @@ import { Projectile } from "./entities/Projectile"
 import { Player } from "./entities/Player"
 import { GameField } from "./world/GameField"
 import type { StairData } from "./world/StairData"
+import type { Vec3 } from "./world/LevelData"
 
 
 export interface ColliderBox {
@@ -17,13 +18,11 @@ export interface ColliderBox {
 }
 
 export interface ParsedMap {
-  // tile = das Map-Zeichen, ueber das der Wandtyp in WALL_TILES nachgeschlagen wird
-  walls: Array<{ x: number; z: number; tile: string }>
-  playerSpawn: { x: number; z: number }
-  enemySpawns: Array<{ x: number; z: number }>
-  rows: number
-  cols: number
-  walkableTiles: Array<{ x: number; z: number }>
+  // Achsparallele Quader: position = Mittelpunkt, size = Ausdehnung in x/y/z
+  blocks: Array<{ tile: string; position: Vec3; size: Vec3 }>
+  // y = Hoehe der Fuesse
+  playerSpawn: Vec3
+  enemySpawns: Vec3[]
   stairs: Array<StairData>
 }
 

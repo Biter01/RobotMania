@@ -2,7 +2,12 @@
 // World / playfield
 export const TILE_SIZE           = 1
 export const WALL_HEIGHT         = 3
-export const BLOCK_HALF_SIZE     = 0.5*TILE_SIZE
+
+// Navigation (Ebenen-Nav-Grid fuer A*)
+// Freiraum, der ueber einer Flaeche mindestens frei sein muss, damit sie begehbar ist
+export const NAV_HEADROOM         = 1
+// Hoehenunterschied, bis zu dem zwei Flaechen als dieselbe Ebene gelten
+export const NAV_HEIGHT_TOLERANCE = 0.05
 
 // Stairs (pro Tile STAIR_COUNT Stufen; Gesamthoehe ergibt sich dynamisch aus den Stufen)
 export const STAIR_COUNT          = 4

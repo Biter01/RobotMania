@@ -1,65 +1,39 @@
 import { ParsedMap } from '../types'
-import { isWallChar } from './WallTiles'
-import { StairData, isStairChar, isHorizontalStair } from './StairData'
+import { StairData, isHorizontalStair } from './StairData'
+import { LevelData } from './LevelData'
 
-export function parseMap(mapData: string[], tileSize: number): ParsedMap {
-  const walls: ParsedMap['walls'] = []
+// Objektliste -> ParsedMap. Stiegen werden vom Objekt (Ecke + Laenge) in StairData
+// (Tile-Bereich + baseY) umgerechnet; das Nav-Grid baut GameField daraus (NavGrid.ts).
+export function parseLevel(level: LevelData, tileSize: number): ParsedMap {
+  const blocks: ParsedMap['blocks'] = []
   const enemySpawns: ParsedMap['enemySpawns'] = []
-  let playerSpawn: ParsedMap['playerSpawn'] = { x: tileSize / 2, z: tileSize / 2 }
-  const walkableTiles: ParsedMap['walkableTiles'] = []
-  const rows = mapData.length
-  const cols = mapData[0]?.length ?? 0
+  const stairs: StairData[] = []
+  let playerSpawn: ParsedMap['playerSpawn'] = { x: 0, y: 0, z: 0 }
 
-  for (let row = 0; row < rows; row++) {
-    for (let col = 0; col < mapData[row].length; col++) {
-      const ch = mapData[row][col]
-      const x = col * tileSize + tileSize / 2
-      const z = row * tileSize + tileSize / 2
-      // Nicht auf '#' hartkodieren: jedes in WALL_TILES registrierte Zeichen ist
-      // eine Wand und damit automatisch solide und nicht begehbar.
-      if (isWallChar(ch)) {
-        walls.push({ x, z, tile: ch })
-      } else {
-        // Stiegen sind begehbar - ueber welche Seite, entscheidet A*/Physics
-        walkableTiles.push({ x: col, z: row })
-        if (ch === 'P') {
-          playerSpawn = { x, z }
-        } else if (ch === 'E') {
-          enemySpawns.push({ x, z })
-        }
-      }
+  for (const obj of level.objects) {
+    switch (obj.type) {
+      case 'block':
+        blocks.push({ tile: obj.tile, position: { ...obj.position }, size: { ...obj.size } })
+        break
+      case 'stair':
+        stairs.push(toStairData(obj.dir, obj.position.x, obj.position.y, obj.position.z, obj.tiles, tileSize))
+        break
+      case 'player':
+        playerSpawn = { ...obj.position }
+        break
+      case 'enemy':
+        enemySpawns.push({ ...obj.position })
+        break
     }
   }
 
-  return { walls, playerSpawn, enemySpawns, rows, cols, walkableTiles, stairs: parseStairs(mapData) }
+  return { blocks, playerSpawn, enemySpawns, stairs }
 }
 
-// Gleich gerichtete Stiegen-Tiles in Achsrichtung ('>>', '^' ueber '^') werden zu
-// einer StairData zusammengefasst. Parallele Reihen bleiben getrennte Stiegen.
-function parseStairs(mapData: string[]): StairData[] {
-  const stairs: StairData[] = []
-  const visited: Set<string> = new Set()
-
-  for (let row = 0; row < mapData.length; row++) {
-    for (let col = 0; col < mapData[row].length; col++) {
-      const ch: string = mapData[row][col]
-      if (!isStairChar(ch) || visited.has(`${col},${row}`)) continue
-
-      let maxCol: number = col
-      let maxRow: number = row
-      if (isHorizontalStair(ch)) {
-        while (mapData[row][maxCol + 1] === ch) maxCol++
-      } else {
-        while (mapData[maxRow + 1]?.[col] === ch) maxRow++
-      }
-
-      for (let r = row; r <= maxRow; r++) {
-        for (let c = col; c <= maxCol; c++) {
-          visited.add(`${c},${r}`)
-        }
-      }
-      stairs.push(new StairData(ch, col, row, maxCol, maxRow))
-    }
-  }
-  return stairs
+function toStairData(dir: StairData['dir'], x: number, y: number, z: number, tiles: number, tileSize: number): StairData {
+  const col: number = Math.round(x / tileSize)
+  const row: number = Math.round(z / tileSize)
+  const maxCol: number = isHorizontalStair(dir) ? col + tiles - 1 : col
+  const maxRow: number = isHorizontalStair(dir) ? row : row + tiles - 1
+  return new StairData(dir, col, row, maxCol, maxRow, y)
 }

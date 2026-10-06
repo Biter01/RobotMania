@@ -1,167 +1,64 @@
-import * as THREE from 'three';
-import { TILE_SIZE } from '../../GameConstants';
-import { GameField } from '../../world/GameField';
-import { StairDir, isStairChar, isHorizontalStair } from '../../world/StairData';
+import { NavGrid, NavNode } from '../../world/NavGrid';
 
-class AstarNode {
-    nowPos: THREE.Vector2;
-    goalPos: THREE.Vector2;
+interface AstarNode {
+    nav: NavNode;
     previousNode: AstarNode | null;
-    fCost: number
     gCost: number;
-
-    constructor(nowPos: THREE.Vector2, goalPos: THREE.Vector2, previousNode: AstarNode | null, gCost: number) {
-        this.nowPos = nowPos;
-        this.goalPos = goalPos;
-        this.previousNode = previousNode;
-        if(previousNode) {
-            this.gCost = previousNode.gCost + gCost; // Assuming a cost of 1 for moving to the next tile
-        } else {
-            this.gCost = 0;
-
-        }
-        this.fCost = this.gCost + this.calculateHeuristic(nowPos, goalPos);
-    }
-
-    private calculateHeuristic(nowPos: THREE.Vector2, goalPos: THREE.Vector2): number {
-        // Implement heuristic calculation (e.g., Manhattan distance) to the goal
-        return Math.sqrt(Math.pow(nowPos.x - goalPos.x, 2) + Math.pow(nowPos.y - goalPos.y, 2));
-    }
+    fCost: number;
 }
 
+// A* ueber das Ebenen-Nav-Grid. Welche Schritte erlaubt sind (gleiche Hoehe, keine
+// Ecken schneiden, Stiegen nur entlang ihrer Achse), entscheidet NavGrid.neighbors.
 export class AstarPathfinding {
-    
-    private static readonly directions: THREE.Vector2[] = [
-            new THREE.Vector2(1, 0),  // Right
-            new THREE.Vector2(-1, 0), // Left
-            new THREE.Vector2(0, 1),  // Up
-            new THREE.Vector2(0, -1),  // Down  
-            new THREE.Vector2(1, 1),  // Up-Right
-            new THREE.Vector2(-1, 1), // Up-Left
-            new THREE.Vector2(1, -1), // Down-Right
-            new THREE.Vector2(-1, -1) // Down-Left
-        ];
 
-
-    private gameField!: GameField;
     private heap: AstarNode[] = [];
 
-    public findPath(enemyPos: THREE.Vector2, playerPos: THREE.Vector2, gameField: GameField): THREE.Vector2[] {
-        this.gameField = gameField
+    // Ganzer Weg vom Start- zum Zielknoten, path[0] ist der Start. Leer = kein Weg.
+    public findPath(start: NavNode, goal: NavNode, nav: NavGrid): NavNode[] {
         this.heap = [];
-        return this.findOptimalWay(enemyPos, playerPos);   // ganzer Weg statt nur [1]
-    }
+        const visited: Set<number> = new Set();
+        const bestCost: Map<number, number> = new Map([[start.id, 0]]);
 
-
-    private findOptimalWay(enemyPos: THREE.Vector2, playerPos: THREE.Vector2): THREE.Vector2[] {
-        
-        const currTile = this.toTileCoordinates(enemyPos);
-        const goalTile = this.toTileCoordinates(playerPos);
-        
-        const visitedNodes: Set<string> = new Set();
-
-        
-        this.addToHeap(new AstarNode(currTile, goalTile, null, 0));
+        this.addToHeap({ nav: start, previousNode: null, gCost: 0, fCost: this.heuristic(start, goal) });
 
         while (this.heap.length > 0) {
-            const current = this.pickBestNode();          
-            const currKey = `${current.nowPos.x},${current.nowPos.y}`;
-
-            if (visitedNodes.has(currKey)) { 
-                continue
+            const current: AstarNode = this.pickBestNode();
+            if (visited.has(current.nav.id)) {
+                continue;
             }
-
-            if (current.nowPos.equals(goalTile))    {
+            if (current.nav.id === goal.id) {
                 return this.reconstructPath(current);
             }
-            
-            visitedNodes.add(currKey);
+            visited.add(current.nav.id);
 
-            for (const neighbor of this.exploreNeighbors(current)) {
-                const nKey = `${neighbor.nowPos.x},${neighbor.nowPos.y}`;
-                if (!visitedNodes.has(nKey)) {
-                    this.addToHeap(neighbor)
-                }
+            for (const edge of nav.neighbors(current.nav)) {
+                const next: NavNode = edge.node;
+                if (visited.has(next.id)) continue;
+
+                const gCost: number = current.gCost + edge.cost;
+                if (gCost >= (bestCost.get(next.id) ?? Infinity)) continue;
+                bestCost.set(next.id, gCost);
+
+                this.addToHeap({ nav: next, previousNode: current, gCost, fCost: gCost + this.heuristic(next, goal) });
             }
         }
-        return [];   // Heap leer, Ziel nie gezogen → kein Weg
-
+        return [];   // Heap leer, Ziel nie gezogen -> kein Weg
     }
 
-    private toTileCoordinates(pos: THREE.Vector2): THREE.Vector2 {
-        return new THREE.Vector2(Math.floor(pos.x / TILE_SIZE), Math.floor(pos.y / TILE_SIZE));
+    // Luftlinie in Tiles - zulaessig, weil jeder Schritt mindestens seine Luftlinie kostet
+    private heuristic(a: NavNode, b: NavNode): number {
+        return Math.hypot(a.col - b.col, a.row - b.row);
     }
 
-
-    private exploreNeighbors(node: AstarNode): AstarNode[] {
-        const neighbors: AstarNode[] = [];
-
-        for(const dir of AstarPathfinding.directions) {
-            const neighborPos = node.nowPos.clone().add(dir);
-
-            if(this.isValidTile(neighborPos) && this.isStairTransitionAllowed(node.nowPos, neighborPos)) {
-
-                if(dir.x != 0 && dir.y != 0) {
-                    const sideA = node.nowPos.clone().add(new THREE.Vector2(dir.x, 0));
-                    const sideB = node.nowPos.clone().add(new THREE.Vector2(0, dir.y));
-                    // if one side is no valid tile don't allow diagonal movement.
-                    // Stiegen-Ecken auch nicht schneiden - dort sitzen die Seiten-Collider
-                    if (!this.isValidTile(sideA) || !this.isValidTile(sideB) || this.isStairTile(sideA) || this.isStairTile(sideB)) {
-                        continue;
-                    }
-                    neighbors.push(new AstarNode(neighborPos, node.goalPos, node, Math.sqrt(2))); // Diagonal movement cost
-   
-                } else {
-                    neighbors.push(new AstarNode(neighborPos, node.goalPos, node, 1));
-                }
-            }
-
-        }
-        return neighbors;
-    }
-
-    private reconstructPath(node: AstarNode): THREE.Vector2[] {
-        const path: THREE.Vector2[] = [];
+    private reconstructPath(node: AstarNode): NavNode[] {
+        const path: NavNode[] = [];
         let currentNode: AstarNode | null = node;
-
-        while(currentNode) {
-            path.unshift(currentNode.nowPos);
+        while (currentNode) {
+            path.unshift(currentNode.nav);
             currentNode = currentNode.previousNode;
         }
-
         return path;
     }
-
-    private isValidTile(tilePos: THREE.Vector2): boolean {
-        // Implement logic to check if the tile is walkable (not a wall or obstacle)
-        // For now, let's assume all tiles are valid
-        
-        return this.gameField.isTileWalkable(tilePos.x, tilePos.y);
-
-    }
-
-    private isStairTile(tilePos: THREE.Vector2): boolean {
-        return isStairChar(this.gameField.getTileChar(tilePos.x, tilePos.y));
-    }
-
-    // Stiegen werden in der Heuristik wie Boden behandelt, sind aber nur entlang ihrer
-    // Achse (von beiden Enden) betretbar und verlassbar. Stiege -> Stiege nur bei gleicher Richtung.
-    private isStairTransitionAllowed(from: THREE.Vector2, to: THREE.Vector2): boolean {
-        const fromChar: string | undefined = this.gameField.getTileChar(from.x, from.y);
-        const toChar: string | undefined = this.gameField.getTileChar(to.x, to.y);
-        const dx: number = to.x - from.x;
-        const dy: number = to.y - from.y;
-
-        if (isStairChar(fromChar) && !this.isAlongStairAxis(fromChar, dx, dy)) return false;
-        if (isStairChar(toChar) && !this.isAlongStairAxis(toChar, dx, dy)) return false;
-        if (isStairChar(fromChar) && isStairChar(toChar) && fromChar !== toChar) return false;
-        return true;
-    }
-
-    private isAlongStairAxis(dir: StairDir, dx: number, dy: number): boolean {
-        return isHorizontalStair(dir) ? dx !== 0 && dy === 0 : dx === 0 && dy !== 0;
-    }
-
 
     private addToHeap(node: AstarNode): void {
         this.heap.push(node);
@@ -195,3 +92,4 @@ export class AstarPathfinding {
         return top;
     }
 }
+

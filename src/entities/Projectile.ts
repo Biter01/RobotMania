@@ -181,14 +181,18 @@ export class Projectile implements Entity {
       yMin: number, yMax: number,       // Höhe des Zylinders): boolean {
 
   ): boolean {
-    return segmentHitsCircle(proGeo, ctx.player.position.x,ctx.player.position.z,PLAYER_RADIUS,yMin,yMax)
+    // yMin/yMax sind relativ zu den Fuessen - der Spieler kann auf einer hoeheren Ebene stehen
+    const footY: number = ctx.player.position.y - ctx.player.baseHeight
+    return segmentHitsCircle(proGeo, ctx.player.position.x,ctx.player.position.z,PLAYER_RADIUS,footY + yMin,footY + yMax)
   }
       
   private enemyIsHit(
       proGeo: ProjectileGeometry,
       enemy: Enemy
   ): boolean {  
-    return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, enemy.yMin, enemy.yMax)
+    // yMin/yMax sind relativ zu den Fuessen - der Gegner kann auf einer hoeheren Ebene stehen
+    const footY: number = enemy.position.y - enemy.baseHeight
+    return segmentHitsCircle(proGeo, enemy.position.x, enemy.position.z, ENEMY_RADIUS, footY + enemy.yMin, footY + enemy.yMax)
   }
 
   public getColliderBox(): ColliderBox {

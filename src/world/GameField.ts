@@ -1,17 +1,18 @@
 import * as THREE from 'three'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { ColliderBox } from '../types'
+import { ColliderBox, ParsedMap } from '../types'
 import { Enemy } from '../entities/Enemy'
 import {
-  TILE_SIZE, WALL_HEIGHT, BLOCK_HALF_SIZE, COLOR_FLOOR, COLOR_WALL_BLOCK,
+  TILE_SIZE, COLOR_WALL_BLOCK,
   STAIR_COUNT, STAIR_WIDTH, STAIR_HEIGHT, COLOR_STAIR,
 } from '../GameConstants'
-import { parseMap } from './Map'
-import { ParsedMap } from '../types'
+import { parseLevel } from './Map'
+import { LevelData, Vec3 } from './LevelData'
 import { loadPixelTexture } from '../core/AssetLoader'
 import { WALL_TILES, WallTile, DEFAULT_WALL_UV_SCALE } from './WallTiles'
 import { StairData, StairDir, buildStairColliders } from './StairData'
 import { PhysicsWorld } from '../physics/Physics'
+import { NavGrid } from './NavGrid'
 
 // Die Stiegen-Geometrie wird lokal Richtung -z ansteigend gebaut ('^') und dann gedreht
 const STAIR_ROTATION: Record<StairDir, number> = {
@@ -21,36 +22,35 @@ const STAIR_ROTATION: Record<StairDir, number> = {
   '>': -Math.PI / 2,
 }
 
-//Singleton class that represents the game field, including walls, floor, and enemies
+// Toleranz, mit der die Fuesse einer Stiege zugeordnet werden (unter baseY / ueber topY)
+const STAIR_FOOT_TOLERANCE: number = 0.5
+
+//Singleton class that represents the game field, including blocks, stairs and enemies
 export class GameField implements PhysicsWorld {
   readonly colliders: ColliderBox[] = []
   readonly enemies: Enemy[] = []
-  readonly playerSpawn: { x: number; z: number }
+  // y = Hoehe der Fuesse
+  readonly playerSpawn: Vec3
+  // Ebenen-Nav-Grid fuer die Gegner-Wegfindung
+  readonly nav: NavGrid
 
-  readonly tileMap: string[]
-
-  // Analog zu Weapon.ready: der ctor bleibt synchron, die Wand-Texturen kommen
+  // Analog zu Weapon.ready: der ctor bleibt synchron, die Block-Texturen kommen
   // asynchron nach. Game.loadLevel() wartet darauf, damit im ersten Frame keine
-  // untexturierten Waende zu sehen sind.
+  // untexturierten Bloecke zu sehen sind.
   readonly ready: Promise<void>
 
   private meshes: THREE.Mesh[] = []
   private parsed: ParsedMap
-  private walkableSet: Set<string>
-  // "col,row" -> Stiege; alle Tiles einer zusammengesetzten Stiege zeigen auf dieselbe StairData
-  private stairLookup: Map<string, StairData> = new Map()
   private pending: Promise<void>[] = []
   private textures: THREE.Texture[] = []
   private disposed: boolean = false
 
-  public constructor(current_level: string[]) {
-    this.parsed = parseMap(current_level, TILE_SIZE)
+  public constructor(level: LevelData) {
+    this.parsed = parseLevel(level, TILE_SIZE)
     this.playerSpawn = this.parsed.playerSpawn
-    this.walkableSet = new Set(this.parsed.walkableTiles.map(t => `${t.x},${t.z}`))
+    this.nav = new NavGrid(this.parsed.blocks, this.parsed.stairs, TILE_SIZE)
 
-    this.tileMap = current_level
-    this.meshes.push(this.buildFloor())
-    this.meshes.push(...this.buildWallBlocks())
+    this.meshes.push(...this.buildBlocks())
     const stairMesh: THREE.Mesh | null = this.buildStairs()
     if (stairMesh) this.meshes.push(stairMesh)
     this.buildEnemies()
@@ -75,43 +75,22 @@ export class GameField implements PhysicsWorld {
     }
   }
 
-  private buildFloor(): THREE.Mesh {
-    const w = this.parsed.cols * TILE_SIZE
-    const d = this.parsed.rows * TILE_SIZE
-    const geo = new THREE.PlaneGeometry(w, d)
-    
-    this.colliders.push({
-        minX: 0,
-        maxX: w,
-        minZ: 0,
-        maxZ: d,  
-
-        minY: -1,
-        maxY: 0
-      })
-
-    geo.applyMatrix4(new THREE.Matrix4().makeRotationX(-Math.PI / 2))
-    geo.applyMatrix4(new THREE.Matrix4().makeTranslation(w / 2, 0, d / 2))
-    const mat = new THREE.MeshLambertMaterial({ color: COLOR_FLOOR })
-    return new THREE.Mesh(geo, mat)
-  }
-
-  // Ein gemergtes Mesh pro Wandtyp: mergeGeometries kennt keine Material-Gruppen,
-  // also braucht jede Textur ihr eigenes Mesh. Bei nur einem Tile-Typ bleibt es
-  // wie bisher bei genau einem Draw-Call fuer alle Waende.
-  private buildWallBlocks(): THREE.Mesh[] {
+  // Ein gemergtes Mesh pro Blocktyp: mergeGeometries kennt keine Material-Gruppen,
+  // also braucht jede Textur ihr eigenes Mesh.
+  private buildBlocks(): THREE.Mesh[] {
     const geosByTile = new Map<string, THREE.BufferGeometry[]>()
 
-    for (const { x, z, tile } of this.parsed.walls) {
-      const geo = new THREE.BoxGeometry(TILE_SIZE, WALL_HEIGHT, TILE_SIZE)
-      geo.applyMatrix4(new THREE.Matrix4().makeTranslation(x, WALL_HEIGHT / 2, z))
+    for (const { tile, position, size } of this.parsed.blocks) {
+      const geo = new THREE.BoxGeometry(size.x, size.y, size.z)
+      scaleBoxUVs(geo, size)
+      geo.translate(position.x, position.y, position.z)
       this.colliders.push({
-        minX: x - BLOCK_HALF_SIZE,
-        maxX: x + BLOCK_HALF_SIZE,
-        minZ: z - BLOCK_HALF_SIZE,
-        maxZ: z + BLOCK_HALF_SIZE,
-        minY: 0,
-        maxY: WALL_HEIGHT
+        minX: position.x - size.x / 2,
+        maxX: position.x + size.x / 2,
+        minY: position.y - size.y / 2,
+        maxY: position.y + size.y / 2,
+        minZ: position.z - size.z / 2,
+        maxZ: position.z + size.z / 2,
       })
 
       const group: THREE.BufferGeometry[] | undefined = geosByTile.get(tile)
@@ -124,19 +103,26 @@ export class GameField implements PhysicsWorld {
 
     const meshes: THREE.Mesh[] = []
     for (const [tile, geos] of geosByTile) {
-      meshes.push(this.createWallMesh(tile, geos))
+      meshes.push(this.createBlockMesh(tile, geos))
+      for (const geo of geos) geo.dispose()
     }
     return meshes
   }
 
-  private createWallMesh(tileChar: string, geos: THREE.BufferGeometry[]): THREE.Mesh {
+  private createBlockMesh(tileKey: string, geos: THREE.BufferGeometry[]): THREE.Mesh {
     // COLOR_WALL_BLOCK ist der Fallback, solange die Textur laedt - und bleibt
-    // stehen, falls ein Zeichen keine Definition hat.
+    // stehen, falls ein Schluessel keine Definition hat.
     const mat = new THREE.MeshLambertMaterial({ color: COLOR_WALL_BLOCK })
     const mesh = new THREE.Mesh(mergeGeometries(geos), mat)
 
-    const def: WallTile | undefined = WALL_TILES[tileChar]
+    const def: WallTile | undefined = WALL_TILES[tileKey]
     if (!def) return mesh
+
+    // Blocktyp ohne Textur: nur Farbe
+    if (!def.texture) {
+      mat.color.setHex(def.color ?? COLOR_WALL_BLOCK)
+      return mesh
+    }
 
     const uvScale: { x: number; y: number } = def.uvScale ?? DEFAULT_WALL_UV_SCALE
 
@@ -167,15 +153,13 @@ export class GameField implements PhysicsWorld {
     return mesh
   }
 
-  // Alle Stufen aller Stiegen in einem gemergten Mesh. Jede Stufe ist ein Block vom
-  // Boden bis zu ihrer Hoehe; zusammengesetzte Stiegen bauen auf dem vorigen Tile auf.
+  // Alle Stufen aller Stiegen in einem gemergten Mesh. Jede Stufe ist ein Block von
+  // baseY bis zu ihrer Hoehe; zusammengesetzte Stiegen bauen auf dem vorigen Tile auf.
   private buildStairs(): THREE.Mesh | null {
     const geos: THREE.BufferGeometry[] = []
 
     for (const stair of this.parsed.stairs) {
       for (const { col, row, index } of stair.tiles()) {
-        this.stairLookup.set(`${col},${row}`, stair)
-
         const x: number = col * TILE_SIZE + TILE_SIZE / 2
         const z: number = row * TILE_SIZE + TILE_SIZE / 2
         for (let s = 1; s <= STAIR_COUNT; s++) {
@@ -185,7 +169,7 @@ export class GameField implements PhysicsWorld {
           const localZ: number = TILE_SIZE / 2 - STAIR_WIDTH * (s - 0.5)
           geo.translate(0, height / 2, localZ)
           geo.rotateY(STAIR_ROTATION[stair.dir])
-          geo.translate(x, 0, z)
+          geo.translate(x, stair.baseY, z)
           geos.push(geo)
         }
       }
@@ -198,22 +182,19 @@ export class GameField implements PhysicsWorld {
     return mesh
   }
 
-  public getStairAt(x: number, z: number): StairData | undefined {
-    return this.stairLookup.get(`${Math.floor(x / TILE_SIZE)},${Math.floor(z / TILE_SIZE)}`)
-  }
-
-  public getTileChar(col: number, row: number): string | undefined {
-    return this.tileMap[row]?.[col]
+  // Stiege unter den Fuessen. Liegen mehrere Stiegen uebereinander (z. B. unter
+  // einer Bruecke), zaehlt nur die, deren Hoehenbereich die Fuesse enthaelt.
+  public getStairAt(x: number, z: number, footY: number): StairData | undefined {
+    return this.parsed.stairs.find((s: StairData): boolean =>
+      s.containsXZ(x, z) &&
+      footY >= s.baseY - STAIR_FOOT_TOLERANCE &&
+      footY <= s.topY + STAIR_FOOT_TOLERANCE)
   }
 
   private buildEnemies() {
-    for (const { x, z } of this.parsed.enemySpawns) {
-      this.enemies.push(new Enemy(x, z))
+    for (const { x, y, z } of this.parsed.enemySpawns) {
+      this.enemies.push(new Enemy(x, y, z))
     }
-  }
-
-  public isTileWalkable(x: number, z: number): boolean {
-    return this.walkableSet.has(`${x},${z}`)
   }
 
   public dispose() {
@@ -230,7 +211,7 @@ export class GameField implements PhysicsWorld {
     }
 
     // Die Materials geben ihre map nicht mit frei - sonst bliebe pro Retry eine
-    // 1024er-Wandtextur im GPU-Speicher liegen.
+    // 1024er-Blocktextur im GPU-Speicher liegen.
     for (const tex of this.textures) {
       tex.dispose()
     }
@@ -245,6 +226,25 @@ export class GameField implements PhysicsWorld {
     this.enemies.length = 0
     this.textures.length = 0
     this.pending.length = 0
-    this.stairLookup.clear()
   }
+}
+
+// BoxGeometry legt auf jede Seite UVs von 0..1 - bei grossen Bloecken wuerde die
+// Textur gestreckt. Hier wird jede Seite auf ihre Groesse in Tiles skaliert, damit die
+// Textur pro TILE_SIZE einmal wiederholt wird, egal wie gross der Block ist.
+// Seiten-Reihenfolge von BoxGeometry: +x, -x, +y, -y, +z, -z (je 4 Vertices).
+function scaleBoxUVs(geo: THREE.BoxGeometry, size: Vec3): void {
+  const uv: THREE.BufferAttribute = geo.getAttribute('uv') as THREE.BufferAttribute
+  const faceScale: Array<[number, number]> = [
+    [size.z, size.y], [size.z, size.y],
+    [size.x, size.z], [size.x, size.z],
+    [size.x, size.y], [size.x, size.y],
+  ]
+  for (let face = 0; face < 6; face++) {
+    const [su, sv] = faceScale[face]
+    for (let v = face * 4; v < face * 4 + 4; v++) {
+      uv.setXY(v, uv.getX(v) * su / TILE_SIZE, uv.getY(v) * sv / TILE_SIZE)
+    }
+  }
+  uv.needsUpdate = true
 }

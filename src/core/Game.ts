@@ -19,6 +19,7 @@ import {
 import { GameState, UpdateContext } from '../types'
 import { UIRenderer } from '../ui/UIRenderer'
 import { setMaxAnisotropy } from './AssetLoader'
+import type { LevelData } from '../world/LevelData'
 
 export const FRAME_DT_CAP = 0.05
 
@@ -108,14 +109,14 @@ private setupResizeHandler(): void {
   }, { signal: this.ac.signal })
 }
 
-private setupWorld(level: string[]): void {
+private setupWorld(level: LevelData): void {
   this.field = new GameField(level)
   this.field.render(this.scene)
 }
 
 private setupPlayer(): void {
   this.player = new Player(
-    this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z,
+    this.camera, this.field.playerSpawn.x, this.field.playerSpawn.z, this.field.playerSpawn.y,
   )
   this.player.setDamageShader(this.damageFlashPass)
 }
@@ -163,14 +164,14 @@ private createContext(): UpdateContext {
   }
 
 
-  async start(level: string[]) {
+  async start(level: LevelData) {
     await this.loadLevel(level)
     if (this.disposed) return
     this.lastTime = performance.now()
     this.rafId = requestAnimationFrame(this.loop)
   }
 
-  async loadLevel(level: string[]) {
+  async loadLevel(level: LevelData) {
     this.disposeWorld()
     this.setupWorld(level)
     this.setupPlayer()

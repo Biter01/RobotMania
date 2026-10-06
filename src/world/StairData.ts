@@ -30,6 +30,8 @@ export class StairData {
   readonly maxCol: number
   readonly maxRow: number
   readonly tileCount: number
+  // Hoehe des unteren Endes in Weltkoordinaten
+  readonly baseY: number
   readonly DEPTH: number = TILE_SIZE
 
   // Weltgrenzen
@@ -38,8 +40,9 @@ export class StairData {
   readonly minZ: number
   readonly maxZ: number
 
-  public constructor(dir: StairDir, minCol: number, minRow: number, maxCol: number, maxRow: number) {
+  public constructor(dir: StairDir, minCol: number, minRow: number, maxCol: number, maxRow: number, baseY: number = 0) {
     this.dir = dir
+    this.baseY = baseY
     this.minCol = minCol
     this.minRow = minRow
     this.maxCol = maxCol
@@ -65,6 +68,25 @@ export class StairData {
     return STAIR_HEIGHT * this.steps
   }
 
+  // Hoehe des oberen Endes in Weltkoordinaten
+  public get topY(): number {
+    return this.baseY + this.HEIGHT
+  }
+
+  // Richtung (in Tiles), in die die Stiege ansteigt
+  public get upStep(): { dCol: number; dRow: number } {
+    switch (this.dir) {
+      case '>': return { dCol: 1, dRow: 0 }
+      case '<': return { dCol: -1, dRow: 0 }
+      case 'v': return { dCol: 0, dRow: 1 }
+      case '^': return { dCol: 0, dRow: -1 }
+    }
+  }
+
+  public containsXZ(x: number, z: number): boolean {
+    return x >= this.minX && x < this.maxX && z >= this.minZ && z < this.maxZ
+  }
+
   // Alle Tiles der Stiege, index 0 = unteres Ende
   public tiles(): StairTile[] {
     const result: StairTile[] = []
@@ -79,7 +101,7 @@ export class StairData {
     return result
   }
 
-  // Hoehe ueber dem Boden an einer Weltposition: Rampe vom unteren zum oberen Ende
+  // Hoehe ueber dem unteren Ende (baseY) an einer Weltposition: Rampe vom unteren zum oberen Ende
   public heightAt(x: number, z: number): number {
     return this.progressAt(x, z) * this.HEIGHT
   }
@@ -101,16 +123,20 @@ export class StairData {
 // betretbar. Ausnahme: liegt daneben ein Tile einer parallelen Stiege mit gleicher Richtung und
 // gleichem index, ist die Hoehe dort identisch und die Fuge bleibt offen (breite Treppe).
 export function buildStairColliders(stairs: StairData[]): ColliderBox[] {
-  const lookup: Map<string, { dir: StairDir; index: number }> = new Map()
+  // Pro Tile koennen mehrere Stiegen uebereinander liegen - daher eine Liste
+  const lookup: Map<string, Array<{ dir: StairDir; index: number; baseY: number }>> = new Map()
   for (const stair of stairs) {
     for (const { col, row, index } of stair.tiles()) {
-      lookup.set(`${col},${row}`, { dir: stair.dir, index })
+      const key: string = `${col},${row}`
+      const list: Array<{ dir: StairDir; index: number; baseY: number }> = lookup.get(key) ?? []
+      list.push({ dir: stair.dir, index, baseY: stair.baseY })
+      lookup.set(key, list)
     }
   }
 
-  const isFlush = (dir: StairDir, index: number, col: number, row: number): boolean => {
-    const neighbor: { dir: StairDir; index: number } | undefined = lookup.get(`${col},${row}`)
-    return neighbor !== undefined && neighbor.dir === dir && neighbor.index === index
+  const isFlush = (stair: StairData, index: number, col: number, row: number): boolean => {
+    const neighbors: Array<{ dir: StairDir; index: number; baseY: number }> = lookup.get(`${col},${row}`) ?? []
+    return neighbors.some((n): boolean => n.dir === stair.dir && n.index === index && n.baseY === stair.baseY)
   }
 
   const colliders: ColliderBox[] = []
@@ -128,38 +154,40 @@ export function buildStairColliders(stairs: StairData[]): ColliderBox[] {
 
 function buildBackColliders(stair:StairData, colliders: ColliderBox[]): void {
   const END_THICKNESS = STAIR_SIDE_THICKNESS * 20
+  const minY: number = stair.baseY
+  const maxY: number = stair.baseY + stair.HEIGHT / 2
 
   switch (stair.dir) {
       case '>':
-        colliders.push({ minX: stair.maxX - END_THICKNESS, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.maxZ })
+        colliders.push({ minX: stair.maxX - END_THICKNESS, maxX: stair.maxX, minY, maxY, minZ: stair.minZ, maxZ: stair.maxZ })
         break
       case '<':
-        colliders.push({ minX: stair.minX, maxX: stair.minX + END_THICKNESS, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.maxZ })
+        colliders.push({ minX: stair.minX, maxX: stair.minX + END_THICKNESS, minY, maxY, minZ: stair.minZ, maxZ: stair.maxZ })
         break
       case 'v':
-        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.maxZ - END_THICKNESS, maxZ: stair.maxZ })
+        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY, maxY, minZ: stair.maxZ - END_THICKNESS, maxZ: stair.maxZ })
         break
       case '^':
-        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY: 0, maxY: stair.HEIGHT/2, minZ: stair.minZ, maxZ: stair.minZ + END_THICKNESS })
+        colliders.push({ minX: stair.minX, maxX: stair.maxX, minY, maxY, minZ: stair.minZ, maxZ: stair.minZ + END_THICKNESS })
         break
     }
 }
 
-function buildSideColliders(stair: StairData, col: number, row: number, index: number, colliders: ColliderBox[], isFlush: (dir: StairDir, index: number, col: number, row: number) => boolean): void {
+function buildSideColliders(stair: StairData, col: number, row: number, index: number, colliders: ColliderBox[], isFlush: (stair: StairData, index: number, col: number, row: number) => boolean): void {
   const t: number = STAIR_SIDE_THICKNESS*20
   const minX: number = col * TILE_SIZE
   const maxX: number = minX + TILE_SIZE
   const minZ: number = row * TILE_SIZE
   const maxZ: number = minZ + TILE_SIZE
-  // Vom Boden bis zur Oberkante dieses Tiles - die Stufen sind Bloecke ab dem Boden (GameField.buildStairs)
-  const minY: number = 0
-  const maxY: number = (index + 1) * STAIR_COUNT * STAIR_HEIGHT
+  // Vom unteren Ende bis zur Oberkante dieses Tiles - die Stufen sind Bloecke ab baseY (GameField.buildStairs)
+  const minY: number = stair.baseY
+  const maxY: number = stair.baseY + (index + 1) * STAIR_COUNT * STAIR_HEIGHT
 
   if (isHorizontalStair(stair.dir)) {
-    if (!isFlush(stair.dir, index, col, row - 1)) colliders.push({ minX, maxX, minY, maxY, minZ, maxZ: minZ + t })
-    if (!isFlush(stair.dir, index, col, row + 1)) colliders.push({ minX, maxX, minY, maxY, minZ: maxZ - t, maxZ })
+    if (!isFlush(stair, index, col, row - 1)) colliders.push({ minX, maxX, minY, maxY, minZ, maxZ: minZ + t })
+    if (!isFlush(stair, index, col, row + 1)) colliders.push({ minX, maxX, minY, maxY, minZ: maxZ - t, maxZ })
   } else {
-    if (!isFlush(stair.dir, index, col - 1, row)) colliders.push({ minX, maxX: minX + t, minY, maxY, minZ, maxZ })
-    if (!isFlush(stair.dir, index, col + 1, row)) colliders.push({ minX: maxX - t, maxX, minY, maxY, minZ, maxZ })
+    if (!isFlush(stair, index, col - 1, row)) colliders.push({ minX, maxX: minX + t, minY, maxY, minZ, maxZ })
+    if (!isFlush(stair, index, col + 1, row)) colliders.push({ minX: maxX - t, maxX, minY, maxY, minZ, maxZ })
   }
 }

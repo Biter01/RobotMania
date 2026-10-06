@@ -1,144 +1,78 @@
-import * as THREE from 'three'
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { TILE_SIZE } from '../../GameConstants'
-import { LEVEL_2 } from '../../world/MapData'
-import { parseMap } from '../../world/Map'
-import type { GameField } from '../../world/GameField'
+import { parseLevel } from '../../world/Map'
+import { NavGrid, NavNode } from '../../world/NavGrid'
+import { LevelData } from '../../world/LevelData'
+import { ParsedMap } from '../../types'
+import { gridLevel } from '../../world/testing/gridLevel'
+import { DEMO_3D } from '../../world/levels/Demo3D'
+import { LEVEL_2 } from '../../world/levels/Level2'
 import { AstarPathfinding } from './AstarPathfinding'
 
-/**
- * Walkability seam. The real GameField cannot be constructed in Node: its ctor
- * builds THREE geometry and `new Enemy(...)`, which calls loadPixelTexture() ->
- * DOM TextureLoader. findPath takes the field as a parameter, so a stub with
- * just isTileWalkable is enough, and `import type` keeps the real
- * GameField -> Enemy -> AssetLoader graph from ever loading.
- */
-let isWalkableImpl: (x: number, z: number) => boolean = (): boolean => true
-let tileRows: string[] = []
-
-const gameField: GameField = {
-  isTileWalkable: (x: number, z: number): boolean => isWalkableImpl(x, z),
-  getTileChar: (x: number, z: number): string | undefined => tileRows[z]?.[x],
-} as unknown as GameField
-
 // ---------------------------------------------------------------------------
-// Fixtures & helpers
+// Helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Installs an ASCII grid as the walkable set. Reuses the production parseMap so
- * fixtures cannot drift from real level semantics ('#' wall, everything else
- * walkable; walkableTiles come back as grid indices).
- */
-function useGrid(rows: string[]): void {
-  const walkable: Set<string> = new Set(
-    parseMap(rows, TILE_SIZE).walkableTiles.map((t): string => `${t.x},${t.z}`)
-  )
-  isWalkableImpl = (x: number, z: number): boolean => walkable.has(`${x},${z}`)
-  tileRows = rows
+function navOf(level: LevelData): NavGrid {
+  const parsed: ParsedMap = parseLevel(level, TILE_SIZE)
+  return new NavGrid(parsed.blocks, parsed.stairs, TILE_SIZE)
 }
 
-/** Marks every tile walkable, including negative coordinates. */
-function useOpenWorld(): void {
-  isWalkableImpl = (): boolean => true
-  tileRows = []
+// Knoten auf Bodenhoehe (oder der angegebenen Hoehe) einer Zelle
+function at(nav: NavGrid, col: number, row: number, y: number = 0): NavNode {
+  const node: NavNode | undefined = nav.nodesAt(col, row).find((n: NavNode): boolean => Math.abs(n.y - y) < 1e-6)
+  if (!node) throw new Error(`no node at ${col},${row},${y}`)
+  return node
 }
 
-/** Grid cell -> world-space centre, matching Map.ts:14-15 and EnemyAI.ts:161-165. */
-function worldCentre(col: number, row: number): THREE.Vector2 {
-  return new THREE.Vector2(col * TILE_SIZE + TILE_SIZE / 2, row * TILE_SIZE + TILE_SIZE / 2)
+function cells(path: NavNode[]): Array<[number, number]> {
+  return path.map((n: NavNode): [number, number] => [n.col, n.row])
 }
 
-function tuples(path: THREE.Vector2[]): Array<[number, number]> {
-  return path.map((v): [number, number] => [v.x, v.y])
-}
-
-/**
- * Step cost, mirroring exploreNeighbors (AstarPathfinding.ts:118): a straight
- * step costs 1, a diagonal one sqrt(2). That makes the objective the real world
- * distance travelled, not the number of tiles touched -- a shorter path in
- * steps can easily be the longer walk.
- */
 function stepCost(dx: number, dy: number): number {
   return dx !== 0 && dy !== 0 ? Math.SQRT2 : 1
 }
 
-/**
- * Whether a step is legal, mirroring exploreNeighbors: the target must be
- * walkable, and a diagonal additionally needs BOTH orthogonal tiles it squeezes
- * past to be free, so nothing clips through a wall corner.
- */
-function canStep(
-  x: number,
-  y: number,
-  dx: number,
-  dy: number,
-  isWalkable: (x: number, z: number) => boolean
-): boolean {
-  if (!isWalkable(x + dx, y + dy)) return false
-  if (dx === 0 || dy === 0) return true
-  return isWalkable(x + dx, y) && isWalkable(x, y + dy)
+function pathCost(path: NavNode[]): number {
+  let total: number = 0
+  for (let i = 1; i < path.length; i++) {
+    total += stepCost(path[i].col - path[i - 1].col, path[i].row - path[i - 1].row)
+  }
+  return total
 }
 
-/**
- * Ground truth: Dijkstra over the same octile costs and the same corner rule the
- * implementation uses. Returns the optimal path cost, or -1 if unreachable. A
- * sorted-array queue is fast enough here -- the largest fixture is LEVEL_2, and
- * pathfinder runtime has its own test.
- */
-function optimalCost(
-  start: [number, number],
-  goal: [number, number],
-  isWalkable: (x: number, z: number) => boolean
-): number {
-  if (!isWalkable(...start) || !isWalkable(...goal)) return -1
+const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
+  [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1],
+]
+
+// Referenz: Dijkstra direkt auf dem ASCII-Raster (eine Ebene, keine Stiegen) mit
+// derselben Eckenregel - unabhaengig von NavGrid, damit die Tests nicht sich selbst pruefen.
+function optimalCost(rows: string[], start: [number, number], goal: [number, number]): number {
+  const free = (x: number, y: number): boolean => rows[y]?.[x] === '.'
+  if (!free(...start) || !free(...goal)) return -1
 
   const best: Map<string, number> = new Map([[`${start[0]},${start[1]}`, 0]])
   const queue: Array<[number, number, number]> = [[start[0], start[1], 0]]
-
   while (queue.length > 0) {
     queue.sort((a, b): number => a[2] - b[2])
     const [cx, cy, cost] = queue.shift()!
     if (cost > (best.get(`${cx},${cy}`) ?? Infinity)) continue
     if (cx === goal[0] && cy === goal[1]) return cost
-
-    for (const dir of NEIGHBOURS) {
-      const nx: number = cx + dir[0]
-      const ny: number = cy + dir[1]
-      if (!canStep(cx, cy, dir[0], dir[1], isWalkable)) continue
-
-      const key = `${nx},${ny}`
-      const next: number = cost + stepCost(dir[0], dir[1])
-      if (next < (best.get(key) ?? Infinity) - 1e-12) {
-        best.set(key, next)
-        queue.push([nx, ny, next])
+    for (const [dx, dy] of NEIGHBOURS) {
+      if (!free(cx + dx, cy + dy)) continue
+      if (dx !== 0 && dy !== 0 && (!free(cx + dx, cy) || !free(cx, cy + dy))) continue
+      const next: number = cost + stepCost(dx, dy)
+      const k: string = `${cx + dx},${cy + dy}`
+      if (next < (best.get(k) ?? Infinity) - 1e-12) {
+        best.set(k, next)
+        queue.push([cx + dx, cy + dy, next])
       }
     }
   }
   return -1
 }
 
-/** Octile cost of a returned path, comparable against optimalCost. */
-function pathCost(path: THREE.Vector2[]): number {
-  let total = 0
-  for (let i = 1; i < path.length; i++) {
-    total += stepCost(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
-  }
-  return total
-}
-
-const NEIGHBOURS: ReadonlyArray<readonly [number, number]> = [
-  [1, 0],
-  [-1, 0],
-  [0, 1],
-  [0, -1],
-  [1, 1],
-  [-1, 1],
-  [1, -1],
-  [-1, -1],
-]
-
-/** Deterministic PRNG so the fuzz test is reproducible without a dependency. */
+// Deterministischer Zufall fuer den Fuzz-Test
 function mulberry32(seed: number): () => number {
   let a: number = seed
   return (): number => {
@@ -150,631 +84,157 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-/** Invariants every returned path must satisfy, regardless of optimality. */
-function assertValidPath(
-  path: THREE.Vector2[],
-  start: [number, number],
-  goal: [number, number]
-): void {
-  expect(path.length).toBeGreaterThan(0)
-  expect([path[0].x, path[0].y]).toEqual(start)
-  expect([path[path.length - 1].x, path[path.length - 1].y]).toEqual(goal)
-
-  for (const tile of path) {
-    expect(isWalkableImpl(tile.x, tile.y)).toBe(true)
-  }
-
-  for (let i = 1; i < path.length; i++) {
-    const dx: number = path[i].x - path[i - 1].x
-    const dy: number = path[i].y - path[i - 1].y
-    // Contiguous single step in one or both axes, and never a repeated tile.
-    expect(Math.max(Math.abs(dx), Math.abs(dy))).toBe(1)
-    // ... and no diagonal squeezing past a wall corner.
-    expect(canStep(path[i - 1].x, path[i - 1].y, dx, dy, isWalkableImpl)).toBe(true)
-  }
-}
-
-beforeEach((): void => {
-  useOpenWorld()
-})
+const finder: AstarPathfinding = new AstarPathfinding()
 
 // ---------------------------------------------------------------------------
-
-describe('coordinate contract', () => {
-  it('takes world coordinates in and returns grid tiles out', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(3, 1),
-      gameField
-    )
-
-    expect([path[0].x, path[0].y]).toEqual([1, 1])
-    expect([path[path.length - 1].x, path[path.length - 1].y]).toEqual([3, 1])
-    // Grid indices, not world units: worldCentre(3, 1) is (7, 3) in world space.
-    expect(path[path.length - 1].x).not.toBe(7)
-  })
-
-  it('path[0] is the start tile, not the first step', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(2, 2),
-      worldCentre(5, 2),
-      gameField
-    )
-    expect([path[0].x, path[0].y]).toEqual([2, 2])
-  })
-
-  it('floors world coordinates onto tiles at tile boundaries', () => {
-    const finder: AstarPathfinding = new AstarPathfinding()
-
-    // TILE_SIZE is 2: world x = 4.0 is the first world unit of tile 2 ...
-    const onBoundary: THREE.Vector2[] = finder.findPath(
-      new THREE.Vector2(4.0, 1),
-      worldCentre(6, 0),
-      gameField
-    )
-    expect(onBoundary[0].x).toBe(2)
-
-    // ... and world x = 3.999 is still tile 1.
-    const belowBoundary: THREE.Vector2[] = finder.findPath(
-      new THREE.Vector2(3.999, 1),
-      worldCentre(6, 0),
-      gameField
-    )
-    expect(belowBoundary[0].x).toBe(1)
-  })
-
-  it('uses Math.floor, so negative world coordinates map to negative tiles', () => {
-    // floor(-0.5 / 2) === -1, whereas truncation would give 0.
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      new THREE.Vector2(-0.5, -0.5),
-      worldCentre(1, 1),
-      gameField
-    )
-    expect([path[0].x, path[0].y]).toEqual([-1, -1])
-  })
-})
+// Tests
+// ---------------------------------------------------------------------------
 
 describe('trivial cases', () => {
-  it('returns a single-tile path when start and goal are the same tile', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(4, 4),
-      worldCentre(4, 4),
-      gameField
-    )
-    expect(path).toHaveLength(1)
-    expect([path[0].x, path[0].y]).toEqual([4, 4])
+  const nav: NavGrid = navOf(gridLevel(['.....', '.....']))
+
+  it('returns just the start when start and goal are the same node', () => {
+    expect(cells(finder.findPath(at(nav, 2, 1), at(nav, 2, 1), nav))).toEqual([[2, 1]])
   })
 
-  it('returns a single-tile path when both positions fall inside one tile', () => {
-    // Different world coords, same tile.
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      new THREE.Vector2(4.1, 4.1),
-      new THREE.Vector2(5.9, 5.9),
-      gameField
-    )
-    expect(path).toHaveLength(1)
-    expect([path[0].x, path[0].y]).toEqual([2, 2])
+  it('starts the path with the start node', () => {
+    const path: NavNode[] = finder.findPath(at(nav, 0, 0), at(nav, 4, 0), nav)
+    expect(cells(path)[0]).toEqual([0, 0])
+    expect(cells(path)[path.length - 1]).toEqual([4, 0])
   })
 
-  it('returns two tiles for an orthogonally adjacent goal', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(3, 3),
-      worldCentre(4, 3),
-      gameField
-    )
-    expect(path).toHaveLength(2)
-    assertValidPath(path, [3, 3], [4, 3])
-  })
-
-  it('returns two tiles for a diagonally adjacent goal', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(3, 3),
-      worldCentre(4, 4),
-      gameField
-    )
-    expect(path).toHaveLength(2)
-    assertValidPath(path, [3, 3], [4, 4])
-  })
-})
-
-describe('open ground', () => {
-  const OPEN_10x10: string[] = Array.from({ length: 10 }, (): string => '..........')
-
-  beforeEach((): void => {
-    useGrid(OPEN_10x10)
-  })
-
-  it('walks a straight horizontal line in Chebyshev-many steps', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 4),
-      worldCentre(7, 4),
-      gameField
-    )
-    assertValidPath(path, [0, 4], [7, 4])
-    expect(path.length - 1).toBe(7)
-  })
-
-  it('walks a straight vertical line in Chebyshev-many steps', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(4, 0),
-      worldCentre(4, 6),
-      gameField
-    )
-    assertValidPath(path, [4, 0], [4, 6])
-    expect(path.length - 1).toBe(6)
-  })
-
-  it('walks a pure diagonal rather than stepping around it', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 0),
-      worldCentre(6, 6),
-      gameField
-    )
-    assertValidPath(path, [0, 0], [6, 6])
-    expect(path.length - 1).toBe(6)
-  })
-
-  it('reaches every goal in the grid at Chebyshev cost', () => {
-    const finder: AstarPathfinding = new AstarPathfinding()
-
-    for (let gx = 0; gx < 10; gx++) {
-      for (let gy = 0; gy < 10; gy++) {
-        const path: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(gx, gy), gameField)
-        assertValidPath(path, [0, 0], [gx, gy])
-        expect(path.length - 1).toBe(Math.max(gx, gy))
-      }
-    }
+  it('takes a diagonal step for a diagonal neighbour', () => {
+    expect(cells(finder.findPath(at(nav, 0, 0), at(nav, 1, 1), nav))).toEqual([[0, 0], [1, 1]])
   })
 })
 
 describe('walls', () => {
   it('threads the single gap in a dividing wall', () => {
-    useGrid([
-      '.....#.....',
-      '.....#.....',
-      '.....#.....',
-      '...........', // the gap, row 3
-      '.....#.....',
-      '.....#.....',
-      '.....#.....',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 0),
-      worldCentre(9, 0),
-      gameField
-    )
-
-    assertValidPath(path, [1, 0], [9, 0])
-    // Crossing column 5 is only possible on row 3.
-    const crossing: THREE.Vector2 | undefined = path.find((t): boolean => t.x === 5)
-    expect(crossing).toBeDefined()
-    expect(crossing!.y).toBe(3)
-  })
-
-  it('routes around a U-shaped dead end without entering a wall', () => {
-    useGrid([
-      '.........',
-      '.#######.',
-      '.#.....#.',
-      '.#..X..#.', // 'X' is not '#', so parseMap treats it as walkable
-      '.#.....#.',
-      '.#######.',
-      '.........',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 0),
-      worldCentre(8, 6),
-      gameField
-    )
-
-    assertValidPath(path, [0, 0], [8, 6])
-    // Every tile walkable is already asserted; make the wall claim explicit.
-    for (const tile of path) {
-      expect(isWalkableImpl(tile.x, tile.y)).toBe(true)
-    }
-  })
-
-  it('navigates a corridor maze', () => {
-    useGrid([
-      '#########',
-      '#.......#',
-      '#.#####.#',
-      '#.#...#.#',
-      '#.#.#.#.#',
-      '#...#...#',
-      '#########',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(3, 3),
-      gameField
-    )
-    assertValidPath(path, [1, 1], [3, 3])
-  })
-})
-
-describe('no path', () => {
-  it('returns an empty array when the goal is sealed off', () => {
-    useGrid([
-      '#########',
-      '#.......#',
-      '#.......#',
-      '#########',
-      '#.......#', // sealed room, unreachable from above
-      '#.......#',
-      '#########',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(5, 5),
-      gameField
-    )
-    expect(path).toEqual([])
-  })
-
-  it('returns an empty array when the goal tile is itself a wall', () => {
-    // The goal is never validated up front, so this costs a full flood fill of
-    // every reachable tile before the heap empties and [] is returned.
-    useGrid([
-      '#########',
-      '#.......#',
-      '#...#...#',
-      '#.......#',
-      '#########',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(4, 2),
-      gameField
-    )
-    expect(path).toEqual([])
-  })
-
-  it('CHARACTERIZATION: start tile is never validated, so a path can begin inside a wall', () => {
-    // AstarPathfinding.ts:78 pushes the start node without an isValidTile check.
-    // This is a latent bug (resolveSeparation in EnemyAI.ts:67-93 nudges enemies
-    // off tile centres every frame and can push one into a wall), not desired
-    // behaviour. Pinned here so a future fix is a deliberate change.
-    useGrid([
-      '.....',
-      '.#...', // start tile (1,1) is a wall
+    const rows: string[] = [
       '.....',
       '.....',
-    ])
+      '##.##',
+      '.....',
+      '.....',
+    ]
+    const nav: NavGrid = navOf(gridLevel(rows))
+    const path: NavNode[] = finder.findPath(at(nav, 0, 0), at(nav, 4, 4), nav)
 
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(4, 3),
-      gameField
-    )
-
-    expect(path.length).toBeGreaterThan(0)
-    expect([path[0].x, path[0].y]).toEqual([1, 1])
-    expect(isWalkableImpl(path[0].x, path[0].y)).toBe(false)
-    // Every tile after the start is walkable, though.
-    for (const tile of path.slice(1)) {
-      expect(isWalkableImpl(tile.x, tile.y)).toBe(true)
-    }
-  })
-})
-
-describe('statelessness across calls', () => {
-  it('returns identical results for the same query on the same instance', () => {
-    useGrid([
-      '.....#.....',
-      '.....#.....',
-      '...........',
-      '.....#.....',
-      '.....#.....',
-    ])
-
-    const finder: AstarPathfinding = new AstarPathfinding()
-    const first: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4), gameField)
-    const second: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(9, 4), gameField)
-
-    expect(tuples(second)).toEqual(tuples(first))
+    expect(cells(path)).toContainEqual([2, 2])
+    expect(pathCost(path)).toBeCloseTo(optimalCost(rows, [0, 0], [4, 4]))
   })
 
-  it('does not leak heap state between different queries', () => {
-    useGrid([
-      '.........',
-      '.........',
-      '....#....',
-      '.........',
-      '.........',
-    ])
-
-    const finder: AstarPathfinding = new AstarPathfinding()
-    const routeA: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4), gameField)
-    finder.findPath(worldCentre(8, 0), worldCentre(0, 4), gameField)
-    const routeAgain: THREE.Vector2[] = finder.findPath(worldCentre(0, 0), worldCentre(8, 4), gameField)
-
-    expect(tuples(routeAgain)).toEqual(tuples(routeA))
-  })
-})
-
-describe('performance and termination on LEVEL_2', () => {
-  beforeEach((): void => {
-    useGrid(LEVEL_2)
-  })
-
-  it('finds a long cross-map path quickly', () => {
-    const start: [number, number] = [1, 1]
-    const goal: [number, number] = [58, 58]
-    expect(isWalkableImpl(...start)).toBe(true)
-    expect(isWalkableImpl(...goal)).toBe(true)
-
-    const began: number = performance.now()
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(...start),
-      worldCentre(...goal),
-      gameField
-    )
-    const elapsed: number = performance.now() - began
-
-    assertValidPath(path, start, goal)
-    expect(elapsed).toBeLessThan(500)
-  })
-
-  it('terminates on an unreachable goal instead of looping forever', { timeout: 5000 }, () => {
-    // Worst case in the game: no path means a full flood fill of the level, and
-    // EnemyAI.ts:98 re-runs exactly this every frame while path.length === 0.
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(-5, -5), // outside the map, so never in the walkable set
-      gameField
-    )
-    expect(path).toEqual([])
-  })
-})
-
-describe('optimality under octile costs', () => {
-  /**
-   * exploreNeighbors (AstarPathfinding.ts:118) charges 1 for a straight step and
-   * sqrt(2) for a diagonal one, so a step costs exactly its Euclidean length.
-   * calculateHeuristic (AstarPathfinding.ts:28) is Euclidean too, which makes it
-   * not merely admissible but CONSISTENT: h(n) <= c(n,n') + h(n') holds by the
-   * triangle inequality. That is what justifies the closed set in
-   * findOptimalWay (AstarPathfinding.ts:84-92), which never re-opens a settled
-   * tile -- with a merely admissible heuristic that shortcut would be unsound.
-   *
-   * Consequence for these tests: the objective is path COST, not step count. A
-   * 13-step path can be a longer walk than a 14-step one, so the oracle is
-   * Dijkstra over the same costs (optimalCost), never BFS.
-   */
-  const DETOUR_GRID: string[] = [
-    '.....#',
-    '.#....',
-    '......',
-    '......',
-    '....##',
-    '......',
-  ]
-
-  beforeEach((): void => {
-    useGrid(DETOUR_GRID)
-  })
-
-  it('returns a path that is valid and connected', () => {
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 0),
-      worldCentre(5, 5),
-      gameField
-    )
-    // This must keep holding whatever the cost model becomes.
-    assertValidPath(path, [0, 0], [5, 5])
-  })
-
-  it('walks the cheapest route once walls force a detour', () => {
-    // Open ground hides any optimality defect (the 'open ground' block stays
-    // green even for a badly chosen heuristic); a detour is what exposes it.
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 0),
-      worldCentre(5, 5),
-      gameField
-    )
-    expect(pathCost(path)).toBeCloseTo(optimalCost([0, 0], [5, 5], isWalkableImpl), 9)
-  })
-
-  it('fuzz - 200 seeded random grids all match the Dijkstra optimum', () => {
-    // Shows optimality is systemic, not an artefact of one hand-picked fixture.
-    const rand: () => number = mulberry32(1337)
-    const size = 12
-    const goal: [number, number] = [size - 1, size - 1]
-    let solvable = 0
-    let suboptimal = 0
-    let firstCounterexample: string | null = null
-
-    for (let trial = 0; trial < 200; trial++) {
-      const rows: string[] = []
-      for (let y = 0; y < size; y++) {
-        let row = ''
-        for (let x = 0; x < size; x++) {
-          const isCorner: boolean = (x === 0 && y === 0) || (x === goal[0] && y === goal[1])
-          row += !isCorner && rand() < 0.25 ? '#' : '.'
-        }
-        rows.push(row)
-      }
-      useGrid(rows)
-
-      const optimal: number = optimalCost([0, 0], goal, isWalkableImpl)
-      if (optimal < 0) continue
-      solvable++
-
-      const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-        worldCentre(0, 0),
-        worldCentre(...goal),
-        gameField
-      )
-      const actual: number = pathCost(path)
-      if (Math.abs(actual - optimal) > 1e-9) {
-        suboptimal++
-        if (firstCounterexample === null) {
-          firstCounterexample =
-            `\n${rows.join('\n')}\n` +
-            `A* = ${actual.toFixed(4)} (${path.length - 1} steps), ` +
-            `optimal = ${optimal.toFixed(4)}\n` +
-            `path: ${tuples(path).map((t): string => t.join(',')).join(' ')}`
-        }
-      }
-    }
-
-    expect(
-      suboptimal,
-      `${suboptimal} of ${solvable} solvable grids were suboptimal.` +
-        `${firstCounterexample ?? ''}`
-    ).toBe(0)
-  })
-})
-
-describe('no diagonal corner cutting', () => {
-  /**
-   * EnemyAI.moveTowards moves straight at the next tile centre through
-   * Physics.computePhysics, so a diagonal that clips a wall corner would get the
-   * enemy stuck on the wall collider. exploreNeighbors
-   * (AstarPathfinding.ts:119-124) therefore requires both orthogonal tiles of a
-   * diagonal to be free.
-   */
-  it('reports no path when both orthogonal neighbours are walls', () => {
-    // (1,0) and (0,1) are walls, so (0,0) is sealed off: the only way out would
-    // be squeezing diagonally to (1,1), which is exactly what is forbidden.
-    useGrid([
-      '.#..',
-      '#...',
-      '....',
-      '....',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 0),
-      worldCentre(1, 1),
-      gameField
-    )
-
-    expect(path).toEqual([])
+  it('returns an empty path when the goal is sealed off', () => {
+    const nav: NavGrid = navOf(gridLevel(['..#..', '..#..', '..#..']))
+    expect(finder.findPath(at(nav, 0, 0), at(nav, 4, 2), nav)).toEqual([])
   })
 
   it('walks around a corner instead of through it', () => {
-    // Only one side of the (1,1) -> (2,2) diagonal is blocked, so a detour
-    // exists and must be taken.
-    useGrid([
-      '....',
-      '..#.',
-      '....',
-      '....',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(2, 2),
-      gameField
-    )
-
-    assertValidPath(path, [1, 1], [2, 2])
-    expect(tuples(path)).toEqual([
-      [1, 1],
-      [1, 2],
-      [2, 2],
-    ])
+    const nav: NavGrid = navOf(gridLevel(['.#', '..']))
+    expect(cells(finder.findPath(at(nav, 0, 0), at(nav, 1, 1), nav))).toEqual([[0, 0], [0, 1], [1, 1]])
   })
 })
 
-describe('stairs', () => {
-  /**
-   * Stairs count as floor for the heuristic, but may only be entered and left
-   * along their axis (from either end), never sideways or diagonally.
-   */
+describe('optimality', () => {
+  it('fuzz - 100 seeded random grids all match the Dijkstra optimum', () => {
+    const rand: () => number = mulberry32(42)
+    for (let round = 0; round < 100; round++) {
+      const w: number = 6 + Math.floor(rand() * 6)
+      const h: number = 6 + Math.floor(rand() * 6)
+      const rows: string[] = Array.from({ length: h }, (): string =>
+        Array.from({ length: w }, (): string => (rand() < 0.28 ? '#' : '.')).join(''))
+      const start: [number, number] = [0, 0]
+      const goal: [number, number] = [w - 1, h - 1]
+      rows[0] = '.' + rows[0].slice(1)
+      rows[h - 1] = rows[h - 1].slice(0, w - 1) + '.'
+
+      const nav: NavGrid = navOf(gridLevel(rows))
+      const path: NavNode[] = finder.findPath(at(nav, ...start), at(nav, ...goal), nav)
+      const expected: number = optimalCost(rows, start, goal)
+
+      if (expected < 0) {
+        expect(path).toEqual([])
+      } else {
+        expect(pathCost(path)).toBeCloseTo(expected)
+      }
+    }
+  })
+
+  it('returns identical results on repeated calls', () => {
+    const nav: NavGrid = navOf(LEVEL_2)
+    const a: NavNode[] = finder.findPath(nav.nodeAt(9.5, 0, 3.5)!, nav.nodeAt(56.5, 0, 22.5)!, nav)
+    const b: NavNode[] = finder.findPath(nav.nodeAt(9.5, 0, 3.5)!, nav.nodeAt(56.5, 0, 22.5)!, nav)
+    expect(cells(a)).toEqual(cells(b))
+    expect(a.length).toBeGreaterThan(0)
+  })
+})
+
+describe('performance on LEVEL_2', () => {
+  it('finds a long cross-map path quickly', () => {
+    const nav: NavGrid = navOf(LEVEL_2)
+    const t0: number = performance.now()
+    const path: NavNode[] = finder.findPath(nav.nodeAt(1.5, 0, 1.5)!, nav.nodeAt(58.5, 0, 58.5)!, nav)
+    expect(path.length).toBeGreaterThan(0)
+    expect(performance.now() - t0).toBeLessThan(100)
+  })
+})
+
+describe('stairs and levels', () => {
+  it('walks up a stair onto a platform and over a bridge', () => {
+    const nav: NavGrid = navOf(DEMO_3D)
+    const path: NavNode[] = finder.findPath(at(nav, 2, 2), at(nav, 12, 14, 2), nav)
+
+    expect(path.length).toBeGreaterThan(0)
+    // Die Stiege ist der einzige Weg nach oben
+    expect(path.some((n: NavNode): boolean => n.stair !== null)).toBe(true)
+    // Ueber die Bruecke (Hoehe 2), nicht unten durch
+    expect(path.some((n: NavNode): boolean => n.row === 10 && n.y === 2)).toBe(true)
+    // Hoehe aendert sich nur auf der Stiege
+    for (let i = 1; i < path.length; i++) {
+      const a: NavNode = path[i - 1]
+      const b: NavNode = path[i]
+      if (!a.stair && !b.stair) expect(b.y).toBe(a.y)
+    }
+  })
+
+  it('stays on the floor when walking under the bridge', () => {
+    const nav: NavGrid = navOf(DEMO_3D)
+    const path: NavNode[] = finder.findPath(at(nav, 11, 12), at(nav, 11, 8), nav)
+
+    expect(path.every((n: NavNode): boolean => n.y === 0)).toBe(true)
+    expect(pathCost(path)).toBe(4)
+  })
+
+  it('cannot reach a platform that has no stair', () => {
+    const level: LevelData = {
+      objects: [
+        { type: 'block', tile: 'floor', position: { x: 3, y: -0.5, z: 1.5 }, size: { x: 6, y: 1, z: 3 } },
+        { type: 'block', tile: 'brick', position: { x: 4.5, y: 1, z: 1.5 }, size: { x: 3, y: 2, z: 3 } },
+      ],
+    }
+    const nav: NavGrid = navOf(level)
+    expect(finder.findPath(at(nav, 0, 1), at(nav, 4, 1, 2), nav)).toEqual([])
+  })
+
   it('does not enter a stair from the side', () => {
-    useGrid([
-      '...',
-      '.>.',
-      '...',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 0),
-      worldCentre(1, 1),
-      gameField
-    )
-
-    assertValidPath(path, [1, 0], [1, 1])
-    expect(path).toHaveLength(4)
-    const before: THREE.Vector2 = path[path.length - 2]
-    expect(before.y).toBe(1)
+    const nav: NavGrid = navOf(gridLevel(['...', '.v.', '...']))
+    const path: NavNode[] = finder.findPath(at(nav, 0, 1), at(nav, 2, 1), nav)
+    expect(path.every((n: NavNode): boolean => n.stair === null)).toBe(true)
   })
 
-  it('does not leave a stair sideways', () => {
-    useGrid([
-      '...',
-      '.^.',
-      '...',
-    ])
+  it('walks along a composed stair in its direction only', () => {
+    // Stiege fuehrt von y=0 auf eine Plattform mit Oberseite 3 (3 Tiles x 1)
+    const level: LevelData = {
+      objects: [
+        { type: 'block', tile: 'floor', position: { x: 4, y: -0.5, z: 0.5 }, size: { x: 8, y: 1, z: 1 } },
+        { type: 'stair', dir: '>', position: { x: 1, y: 0, z: 0 }, tiles: 3 },
+        { type: 'block', tile: 'brick', position: { x: 6, y: 1.5, z: 0.5 }, size: { x: 4, y: 3, z: 1 } },
+      ],
+    }
+    const nav: NavGrid = navOf(level)
+    const path: NavNode[] = finder.findPath(at(nav, 0, 0), at(nav, 7, 0, 3), nav)
 
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(1, 1),
-      worldCentre(0, 1),
-      gameField
-    )
-
-    assertValidPath(path, [1, 1], [0, 1])
-    expect(path).toHaveLength(4)
-    expect(path[1].x).toBe(1)
-  })
-
-  it('walks along a composed stair', () => {
-    useGrid([
-      '####',
-      '.>>.',
-      '####',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 1),
-      worldCentre(3, 1),
-      gameField
-    )
-
-    expect(tuples(path)).toEqual([
-      [0, 1],
-      [1, 1],
-      [2, 1],
-      [3, 1],
-    ])
-  })
-
-  it('walks up a vertical stair from either end', () => {
-    useGrid([
-      '#.#',
-      '#^#',
-      '#^#',
-      '#.#',
-    ])
-
-    const up: THREE.Vector2[] = new AstarPathfinding().findPath(worldCentre(1, 3), worldCentre(1, 0), gameField)
-    const down: THREE.Vector2[] = new AstarPathfinding().findPath(worldCentre(1, 0), worldCentre(1, 3), gameField)
-
-    expect(up).toHaveLength(4)
-    expect(down).toHaveLength(4)
-  })
-
-  it('does not connect stairs of different direction', () => {
-    useGrid([
-      '####',
-      '.<>.',
-      '####',
-    ])
-
-    const path: THREE.Vector2[] = new AstarPathfinding().findPath(
-      worldCentre(0, 1),
-      worldCentre(3, 1),
-      gameField
-    )
-
-    expect(path).toEqual([])
+    expect(cells(path)).toEqual([[0, 0], [1, 0], [2, 0], [3, 0], [4, 0], [5, 0], [6, 0], [7, 0]])
+    expect(path.slice(1, 4).map((n: NavNode): number => n.stairIndex)).toEqual([0, 1, 2])
   })
 })

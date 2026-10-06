@@ -1,9 +1,10 @@
-import { TILE_SIZE } from '../../GameConstants';
+import { PLAYER_EYE_HEIGHT } from '../../GameConstants';
 import { Enemy } from '../Enemy'
 import * as THREE from 'three'
 import { AstarPathfinding } from './AstarPathfinding';
 import { GameField } from '../../world/GameField';
 import { ColliderBox } from '../../types';
+import { NavGrid, NavNode } from '../../world/NavGrid';
 import { Physics, PhysicsWorld } from '../../physics/Physics';
 
 export class EnemyAI {
@@ -14,7 +15,7 @@ export class EnemyAI {
     readonly speed = 3;
     readonly replanInterval = 0.3;   
     private readonly pathFinder = new AstarPathfinding();   
-    private path: THREE.Vector2[] = [];
+    private path: NavNode[] = [];
     private pathIndex = 0;
     private replanTimer = Math.random() * this.replanInterval;
     //private seperationTimer = 0.5; // Random initial timer to avoid all enemies separating at the same time
@@ -82,7 +83,7 @@ export class EnemyAI {
             this.replanTimer = this.replanInterval;
         }
         //Just follow
-        this.followPath(dt, gameField);
+        this.followPath(dt, gameField, gameField.nav);
     }
 
      private wanderSide(playerPos: THREE.Vector3,dt: number, world: PhysicsWorld): void {
@@ -134,18 +135,21 @@ export class EnemyAI {
 
     }
 
+    // Start und Ziel ueber die Fuss-Hoehe auf die richtige Ebene des Nav-Grids legen
     private recomputePath(playerPos: THREE.Vector3, gameField: GameField): void {
-        const enemy2D  = new THREE.Vector2(this.enemy.position.x, this.enemy.position.z);
-        const player2D = new THREE.Vector2(playerPos.x, playerPos.z);
-        this.path = this.pathFinder.findPath(enemy2D, player2D, gameField);
+        const nav: NavGrid = gameField.nav;
+        const pos: THREE.Vector3 = this.enemy.position;
+        const start: NavNode | undefined = nav.nodeAt(pos.x, pos.y - this.enemy.baseHeight, pos.z);
+        const goal: NavNode | undefined = nav.nodeAt(playerPos.x, playerPos.y - PLAYER_EYE_HEIGHT, playerPos.z);
+        this.path = start && goal ? this.pathFinder.findPath(start, goal, nav) : [];
         this.pathIndex = this.path.length > 1 ? 1 : 0;  // Index 0 ist das eigene Feld
     }
 
-    private followPath(dt: number, world: PhysicsWorld): void {
+    private followPath(dt: number, world: PhysicsWorld, nav: NavGrid): void {
         if (this.pathIndex >= this.path.length) {
             return
         }
-        const target = this.path[this.pathIndex];
+        const target: { x: number; y: number; z: number } = nav.centerOf(this.path[this.pathIndex]);
         this.moveTowards(target, dt, world);
         if (this.tileIsReached(this.enemy.position, target)) {
             this.pathIndex++;     // next Field of cached way
@@ -163,12 +167,9 @@ export class EnemyAI {
     }
 
     // Entscheidet nur, wohin gegangen wird - Bewegung, Kollision und Stiegen macht Physics
-    private moveTowards(targetPos: THREE.Vector2, dt: number, world: PhysicsWorld): void {
-        const target = EnemyAI._target3.set(
-            targetPos.x * TILE_SIZE + TILE_SIZE / 2,
-            this.enemy.position.y,
-            targetPos.y * TILE_SIZE + TILE_SIZE / 2
-        );
+    private moveTowards(targetPos: { x: number; z: number }, dt: number, world: PhysicsWorld): void {
+        // Hoehe ignorieren: die setzt Physics (Stiegen, Gravitation)
+        const target = EnemyAI._target3.set(targetPos.x, this.enemy.position.y, targetPos.z);
 
         const toTarget = EnemyAI._toTarget3.subVectors(target, this.enemy.position);
         const dist = toTarget.length();
@@ -183,9 +184,8 @@ export class EnemyAI {
         const velocity: THREE.Vector3 = EnemyAI._velocity.copy(toTarget).normalize().multiplyScalar(speed);
         Physics.getInstance().computePhysics(this.enemy, world, velocity, dt);
     }
-    private tileIsReached(enemyPos: THREE.Vector3, nextTile: THREE.Vector2): boolean {
-        const tileCenter = new THREE.Vector3(nextTile.x * TILE_SIZE + TILE_SIZE / 2, enemyPos.y, nextTile.y * TILE_SIZE + TILE_SIZE / 2);
-        const distance = enemyPos.distanceTo(tileCenter);
+    private tileIsReached(enemyPos: THREE.Vector3, tileCenter: { x: number; z: number }): boolean {
+        const distance = Math.hypot(enemyPos.x - tileCenter.x, enemyPos.z - tileCenter.z);
         return distance <= 0.1; // Threshold to consider the tile reached
     }
 }

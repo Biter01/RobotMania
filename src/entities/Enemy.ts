@@ -43,8 +43,9 @@ export class Enemy implements Entity, Damageable, PhysicsBody {
 
   private colliderBox: ColliderBox
 
-  constructor(x: number, z: number, attackCooldown = 0.3) {
-    this.position = new THREE.Vector3(x, this.baseHeight, z)
+  // footY = Hoehe der Fuesse am Spawn (Oberseite des Blocks darunter)
+  constructor(x: number, footY: number, z: number, attackCooldown = 0.3) {
+    this.position = new THREE.Vector3(x, footY + this.baseHeight, z)
     this.yMin = 0
     this.yMax = 1.4
     const mat = new THREE.SpriteMaterial({ color: COLOR_ALIVE, alphaTest: 0.5 })
