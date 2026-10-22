@@ -1,20 +1,31 @@
-import { TILE_SIZE } from '../../GameConstants';
+import { PLAYER_EYE_HEIGHT } from '../../GameConstants';
 import { Enemy } from '../Enemy'
 import * as THREE from 'three'
 import { AstarPathfinding } from './AstarPathfinding';
 import { GameField } from '../../world/GameField';
 import { ColliderBox } from '../../types';
+import { NavGrid, NavNode } from '../../world/NavGrid';
 import { Physics, PhysicsWorld } from '../../physics/Physics';
 
+/**
+ * Decision making and movement of one enemy.
+ *
+ * Within {@link attackRange} the enemy shoots and occasionally strafes; within
+ * {@link sightRange} it follows an A* path over the nav grid; otherwise it idles.
+ */
 export class EnemyAI {
     
     readonly enemy: Enemy;
+    /** Distance up to which the enemy chases the player. */
     readonly sightRange = 50;
+    /** Distance up to which the enemy shoots instead of walking. */
     readonly attackRange = 8;
+    /** Walking speed in units/s. */
     readonly speed = 3;
+    /** Seconds between two path recalculations. */
     readonly replanInterval = 0.3;   
     private readonly pathFinder = new AstarPathfinding();   
-    private path: THREE.Vector2[] = [];
+    private path: NavNode[] = [];
     private pathIndex = 0;
     private replanTimer = Math.random() * this.replanInterval;
     //private seperationTimer = 0.5; // Random initial timer to avoid all enemies separating at the same time
@@ -34,6 +45,7 @@ export class EnemyAI {
         this.enemy = enemy;
     }
 
+    /** Chooses attack, follow or idle behaviour for this step and acts on it. */
     public update(dt:number,playerPos: THREE.Vector3, gameField:GameField): void {
         if (!this.enemy.sm) return;
 
@@ -45,7 +57,7 @@ export class EnemyAI {
         } else if (inSight) {
             this.followBehaviour(playerPos, dt,gameField)
         } else {
-            //Idle Behaviour
+            // Idle behaviour
             this.enemy.setActivity('idle');
         }
         
@@ -81,14 +93,15 @@ export class EnemyAI {
             this.recomputePath(playerPos, gameField);          
             this.replanTimer = this.replanInterval;
         }
-        //Just follow
-        this.followPath(dt, gameField);
+        // Just follow
+        this.followPath(dt, gameField, gameField.nav);
     }
 
+     /** Strafes left or right of the player for a short time, if the way is free. */
      private wanderSide(playerPos: THREE.Vector3,dt: number, world: PhysicsWorld): void {
         const colliders: ColliderBox[] = world.colliders
         if(this.wanderTimer == this.wanderTime) {
-            this.wanderRight = Math.random() > 0.5; // Zufällige Richtung für das Wandern
+            this.wanderRight = Math.random() > 0.5; // random strafing direction
         }
         
         if(this.wanderTimer > 0) {
@@ -101,7 +114,7 @@ export class EnemyAI {
         }
 
         const toTarget = EnemyAI._toTarget3.subVectors(playerPos, this.enemy.position);
-        toTarget.y = 0; // Hoehenunterschied (Stiegen) darf die Seitwaertsrichtung nicht kippen
+        toTarget.y = 0; // height differences (stairs) must not tilt the sideways direction
         toTarget.normalize();
         const right = EnemyAI._right.crossVectors(toTarget, EnemyAI._up).normalize();
 
@@ -115,7 +128,7 @@ export class EnemyAI {
 
         if (this.wanderRight && canMoveRight) {
 
-            this.enemy.facing = right.clone(); // clone, da facing sonst denselben Scratch-Vektor referenziert
+            this.enemy.facing = right.clone(); // clone, otherwise facing would reference the same scratch vector
             Physics.getInstance().computePhysics(this.enemy, world, EnemyAI._velocity.copy(right).multiplyScalar(this.speed), dt);
         } else if(canMoveLeft) {
             this.enemy.facing = right.clone().negate();
@@ -134,21 +147,25 @@ export class EnemyAI {
 
     }
 
+    /** Places start and goal on the right level of the nav grid via their foot height, then runs A*. */
     private recomputePath(playerPos: THREE.Vector3, gameField: GameField): void {
-        const enemy2D  = new THREE.Vector2(this.enemy.position.x, this.enemy.position.z);
-        const player2D = new THREE.Vector2(playerPos.x, playerPos.z);
-        this.path = this.pathFinder.findPath(enemy2D, player2D, gameField);
-        this.pathIndex = this.path.length > 1 ? 1 : 0;  // Index 0 ist das eigene Feld
+        const nav: NavGrid = gameField.nav;
+        const pos: THREE.Vector3 = this.enemy.position;
+        const start: NavNode | undefined = nav.nodeAt(pos.x, pos.y - this.enemy.baseHeight, pos.z);
+        const goal: NavNode | undefined = nav.nodeAt(playerPos.x, playerPos.y - PLAYER_EYE_HEIGHT, playerPos.z);
+        this.path = start && goal ? this.pathFinder.findPath(start, goal, nav) : [];
+        this.pathIndex = this.path.length > 1 ? 1 : 0;  // index 0 is the enemy's own cell
     }
 
-    private followPath(dt: number, world: PhysicsWorld): void {
+    /** Walks towards the next node of the cached path. */
+    private followPath(dt: number, world: PhysicsWorld, nav: NavGrid): void {
         if (this.pathIndex >= this.path.length) {
             return
         }
-        const target = this.path[this.pathIndex];
+        const target: { x: number; y: number; z: number } = nav.centerOf(this.path[this.pathIndex]);
         this.moveTowards(target, dt, world);
         if (this.tileIsReached(this.enemy.position, target)) {
-            this.pathIndex++;     // next Field of cached way
+            this.pathIndex++;     // next cell of the cached path
         }
     }
 
@@ -162,13 +179,10 @@ export class EnemyAI {
         return distance < this.attackRange;
     }
 
-    // Entscheidet nur, wohin gegangen wird - Bewegung, Kollision und Stiegen macht Physics
-    private moveTowards(targetPos: THREE.Vector2, dt: number, world: PhysicsWorld): void {
-        const target = EnemyAI._target3.set(
-            targetPos.x * TILE_SIZE + TILE_SIZE / 2,
-            this.enemy.position.y,
-            targetPos.y * TILE_SIZE + TILE_SIZE / 2
-        );
+    /** Only decides where to go - movement, collisions and stairs are handled by Physics. */
+    private moveTowards(targetPos: { x: number; z: number }, dt: number, world: PhysicsWorld): void {
+        // Ignore the height: Physics sets it (stairs, gravity)
+        const target = EnemyAI._target3.set(targetPos.x, this.enemy.position.y, targetPos.z);
 
         const toTarget = EnemyAI._toTarget3.subVectors(target, this.enemy.position);
         const dist = toTarget.length();
@@ -176,16 +190,15 @@ export class EnemyAI {
             return
         }
 
-        this.enemy.facing = toTarget.clone().normalize(); // clone hier nötig, da facing eine eigene Referenz braucht
+        this.enemy.facing = toTarget.clone().normalize(); // clone needed, facing needs its own reference
 
-        // Im letzten Schritt genau auf der Tile-Mitte landen statt darueber hinaus
+        // On the last step land exactly on the cell center instead of overshooting
         const speed: number = Math.min(this.speed, dist / dt);
         const velocity: THREE.Vector3 = EnemyAI._velocity.copy(toTarget).normalize().multiplyScalar(speed);
         Physics.getInstance().computePhysics(this.enemy, world, velocity, dt);
     }
-    private tileIsReached(enemyPos: THREE.Vector3, nextTile: THREE.Vector2): boolean {
-        const tileCenter = new THREE.Vector3(nextTile.x * TILE_SIZE + TILE_SIZE / 2, enemyPos.y, nextTile.y * TILE_SIZE + TILE_SIZE / 2);
-        const distance = enemyPos.distanceTo(tileCenter);
+    private tileIsReached(enemyPos: THREE.Vector3, tileCenter: { x: number; z: number }): boolean {
+        const distance = Math.hypot(enemyPos.x - tileCenter.x, enemyPos.z - tileCenter.z);
         return distance <= 0.1; // Threshold to consider the tile reached
     }
 }

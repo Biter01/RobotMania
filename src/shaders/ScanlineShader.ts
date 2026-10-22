@@ -1,6 +1,10 @@
 
 import * as THREE from 'three'
 
+/**
+ * Post-processing pass that darkens and brightens alternating screen rows for a
+ * CRT-like look, with a light color tint.
+ */
 export const ScanlineShader = {
   uniforms: {
     tDiffuse:   { value: null as THREE.Texture | null },
@@ -35,11 +39,11 @@ export const ScanlineShader = {
 
       float row = mod(floor(vUv.y * resolution), 5.0);
 
-      // Maske zentriert um 1.0: helle Zeilen werden leicht aufgehellt,
-      // dunkle Zeilen leicht abgedunkelt → Durchschnittshelligkeit bleibt 1.0
+      // Mask centered around 1.0: bright rows get slightly brighter,
+      // dark rows slightly darker -> the average brightness stays 1.0
       float mask = 1.0 + intensity * (0.5 - row);
 
-      // Scanline-Farbe nur auf den dunklen Zeilen als subtiles Tinting
+      // Scanline color only on the dark rows as a subtle tint
       //vec3 tint = mix(vec3(1.0), scanlineColor, row * intensity * 0.5);
   
       gl_FragColor = vec4(color.rgb * mask + scanlineColor * 0.12 , color.a);

@@ -5,29 +5,32 @@ import { toWorldBox } from './Physics'
 const STATIC_COLOR = 0x00ff00
 const ENEMY_COLOR = 0xff0000
 const PROJECTILE_COLOR = 0xffff00
-// Ueber allem anderen zeichnen - depthTest ist aus, die Boxen sind auch durch Waende sichtbar
+// Drawn on top of everything - depthTest is off, so the boxes are visible through walls
 const DEBUG_RENDER_ORDER = 999
 
-// Alles mit Position + relativem Collider (Enemy, Projectile, Player)
+/** Anything with a position and a relative collider (Enemy, Projectile, Player). */
 export interface ColliderSource {
   position: THREE.Vector3
   getColliderBox(): ColliderBox
 }
 
-// Die 12 Kanten einer Box als Eckpunkt-Index-Paare. Eckpunkt i: Bit 0 = x, Bit 1 = y, Bit 2 = z
+/** The 12 edges of a box as corner index pairs. Corner i: bit 0 = x, bit 1 = y, bit 2 = z. */
 const BOX_EDGES: ReadonlyArray<readonly [number, number]> = [
-  [0, 1], [2, 3], [4, 5], [6, 7], // entlang x
-  [0, 2], [1, 3], [4, 6], [5, 7], // entlang y
-  [0, 4], [1, 5], [2, 6], [3, 7], // entlang z
+  [0, 1], [2, 3], [4, 5], [6, 7], // along x
+  [0, 2], [1, 3], [4, 6], [5, 7], // along y
+  [0, 4], [1, 5], [2, 6], [3, 7], // along z
 ]
 
 function createDebugMaterial(color: number): THREE.LineBasicMaterial {
   return new THREE.LineBasicMaterial({ color, depthTest: true, transparent: true, opacity: 0.5 })
 }
 
-// Zeichnet alle Collider als Drahtgitter-Boxen in die Scene.
-// Statische Collider (Waende, Boden, Stiegen) als ein gemergtes LineSegments,
-// dynamische (Gegner, Projektile) als skalierte Einheitsbox pro Entity.
+/**
+ * Debug view that draws all colliders as wireframe boxes into the scene.
+ *
+ * Static colliders (blocks, stairs) become one merged LineSegments; dynamic ones
+ * (enemies, projectiles) get one scaled unit box per entity.
+ */
 export class ColliderDebug {
   private staticLines: THREE.LineSegments
   private unitBox: THREE.BufferGeometry
@@ -37,6 +40,10 @@ export class ColliderDebug {
   private seen: Set<ColliderSource> = new Set()
   private worldBox: ColliderBox = { minX: 0, maxX: 0, minZ: 0, maxZ: 0, minY: 0, maxY: 0 }
 
+  /**
+   * @param scene - Scene to draw into.
+   * @param staticColliders - The level's static colliders in world coordinates.
+   */
   constructor(private scene: THREE.Scene, staticColliders: ColliderBox[]) {
     this.staticLines = new THREE.LineSegments(
       this.buildStaticGeometry(staticColliders),
@@ -51,7 +58,7 @@ export class ColliderDebug {
     box.dispose()
   }
 
-  // Muss nach allen Bewegungen/Spawns des Frames laufen, sonst hinken die Boxen hinterher
+  /** Updates the dynamic boxes. Must run after all movement/spawns of the frame, or the boxes lag behind. */
   update(enemies: ColliderSource[], projectiles: ColliderSource[]): void {
     this.seen.clear()
     for (const enemy of enemies) this.syncBox(enemy, this.enemyMaterial)
@@ -70,7 +77,7 @@ export class ColliderDebug {
     this.staticLines.geometry.dispose()
     ;(this.staticLines.material as THREE.Material).dispose()
 
-    // Die dynamischen Boxen teilen sich Geometry + Materials - nur einmal freigeben
+    // The dynamic boxes share geometry + materials - release them only once
     for (const lines of this.boxes.values()) {
       lines.removeFromParent()
     }
@@ -102,8 +109,8 @@ export class ColliderDebug {
   }
 
   private buildStaticGeometry(colliders: ColliderBox[]): THREE.BufferGeometry {
-    // Jede Box hat 12 Kanten.
-    // Jede Kante besteht aus 2 Punkten mit jeweils 3 Koordinaten.
+    // Every box has 12 edges.
+    // Every edge consists of 2 points with 3 coordinates each.
     const positions = new Float32Array(
       colliders.length * 12 * 2 * 3,
     )

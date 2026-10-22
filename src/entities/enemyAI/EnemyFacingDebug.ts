@@ -8,12 +8,13 @@ const ARROW_HEAD_LENGTH = 0.05 * TILE_SIZE
 const ARROW_HEAD_WIDTH = 0.05 * TILE_SIZE
 const ARROW_Y_OFFSET = 0.05
 
-// Draws arrows in the scene to visualize the facing direction of enemies. Useful for debugging AI behavior.
+/** Draws arrows in the scene to visualize the facing direction of enemies. Useful for debugging AI behavior. */
 export class EnemyFacingDebug {
   private arrows = new Map<Enemy, THREE.ArrowHelper>()
 
   constructor(private scene: THREE.Scene) {}
 
+  /** Creates, moves and removes arrows so they match the given enemies. */
   update(enemies: Enemy[]): void {
     const alive = new Set(enemies)
 

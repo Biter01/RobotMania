@@ -1,19 +1,25 @@
 import { StateConfig } from './StateConfig'
 
+/**
+ * Plays frame animations and switches between states.
+ * @typeParam S - The state identifiers, e.g. an enum.
+ */
 export class StateMachine<S extends number | string> {
   private states = new Map<S, StateConfig<S>>()
   private current: S | null = null
-  private frameIdx = 0  // Index innerhalb frames[]
-  private elapsed = 0   // akkumulierte Zeit seit letztem Frame-Wechsel
+  private frameIdx = 0  // index within frames[]
+  private elapsed = 0   // time accumulated since the last frame change
 
-  // Aktueller Sprite-Sheet-Index – wird von applyFrame() gelesen
+  /** Current sprite sheet frame index - read by Enemy.applyFrame(). */
   currentFrame = 0
 
+  /** Registers a state. Returns `this` for chaining. */
   addState(state: S, config: StateConfig<S>): this {
     this.states.set(state, config)
     return this
   }
 
+  /** Starts `state` from its first frame, even if it is already running. */
   start(state: S): void {
     this.current = state
     this.frameIdx = 0
@@ -22,11 +28,13 @@ export class StateMachine<S extends number | string> {
     if (config) this.currentFrame = config.frames[0]
   }
 
+  /** Switches to `state` unless it is already the current one. */
   transition(state: S): void {
     if (this.current === state) return
     this.start(state)
   }
 
+  /** Advances the animation by `dt` seconds. */
   update(dt: number): void {
     if (this.current === null) return
     const config = this.states.get(this.current)
@@ -43,11 +51,11 @@ export class StateMachine<S extends number | string> {
         if (config.loop) {
           this.frameIdx = 0
         } else if (config.next !== undefined) {
-          // Transition in den Nachfolge-State
+          // Transition to the follow-up state
           this.transition(config.next)
           return
         } else {
-          // Letzten Frame halten
+          // Hold the last frame
           this.frameIdx = config.frames.length - 1
         }
       }
@@ -56,6 +64,7 @@ export class StateMachine<S extends number | string> {
     }
   }
 
+  /** Returns the current state (despite the name, not the frame), or null before start(). */
   public getCurrentFrame():S|null {
       return this.current
   }

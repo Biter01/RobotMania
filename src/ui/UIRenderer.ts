@@ -3,6 +3,7 @@ import { GameState } from "../types";
 type UIEventName = 'start' | 'retry'
 
 
+/** Values shown in the HUD. */
 export interface HUDElements {
     health: number
     fps: number
@@ -10,6 +11,11 @@ export interface HUDElements {
     debug: boolean
 }
 
+/**
+ * Renders the HTML overlays (menu, HUD, game over, loading) on top of the canvas (singleton).
+ *
+ * Clicks are forwarded to the callbacks registered with {@link on}.
+ */
 export class UIRenderer {
 
     private uiContainer: HTMLElement
@@ -50,6 +56,7 @@ export class UIRenderer {
 
     private static instance: null | UIRenderer
 
+    /** Returns the shared instance, creating it on the `#game-ui` element. */
     static getInstance(): UIRenderer {
         if (!UIRenderer.instance) {
             const uiContainer = document.getElementById("game-ui") as HTMLElement
@@ -60,16 +67,16 @@ export class UIRenderer {
 
     private constructor(uiContainer: HTMLElement) {
         this.uiContainer = uiContainer
-        // Ein einziger Listener, der NIE verloren geht, egal wie oft innerHTML wechselt
+        // One single listener that is NEVER lost, no matter how often innerHTML changes
         this.uiContainer.addEventListener('click', this.handleClick)
     }
 
-    // Registrierung: Game (bzw. main.ts) sagt UIRenderer, WAS bei welchem Klick passieren soll
+    /** Registers what should happen on a UI event; called by main.ts. */
     public on(event: UIEventName, cb: () => void): void {
         this.listeners[event] = cb
     }
 
-    //UI Event
+    // UI event
     private handleClick = (e: MouseEvent): void => {
         const target = e.target as HTMLElement
 
@@ -80,6 +87,7 @@ export class UIRenderer {
         }
     }
 
+    /** Shows the screen that belongs to `state`. */
     public render(state: GameState): void {
         if (state === GameState.GAMEOVER) {
             this.renderGameOverScreen()
@@ -111,6 +119,7 @@ export class UIRenderer {
         this.debugEl =  document.getElementById('debug') as HTMLElement
     }
 
+    /** Updates the HUD values. Only valid while the HUD is shown (state PLAYING). */
     public updateHud(hud: HUDElements) {
         this.fpsEl!.textContent = `FPS: ${Math.round(hud.fps)}`
         this.healthEl!.textContent = hud.debug ? `INVINCIBLE`: `Health: ${hud.health}`;

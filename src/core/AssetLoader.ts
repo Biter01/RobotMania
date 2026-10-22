@@ -2,22 +2,33 @@ import * as THREE from 'three'
 
 const loader = new THREE.TextureLoader()
 
-// Basis-Texturen pro URL + colorSpace. Clones teilen sich die Source (ein
-// GPU-Upload), behalten aber eigene offset/repeat - noetig fuer die
-// Frame-Offsets pro Enemy.
+/**
+ * Base textures per URL + colorSpace + mipmaps. Clones share the source (one
+ * GPU upload) but keep their own offset/repeat - needed for the per-enemy
+ * frame offsets.
+ */
 const cache = new Map<string, Promise<THREE.Texture>>()
 
+/** Options for {@link loadPixelTexture}. */
 export interface PixelTextureOptions {
-  // Nur fuer Welt-Geometrie (Wand-Tiles): grosse Texturen auf weit entfernten
-  // Flaechen flimmern ohne Mipmaps stark. magFilter bleibt in beiden Faellen
-  // NearestFilter, aus der Naehe bleiben die Pixel also hart.
+  /**
+   * Only for world geometry (blocks): large textures on distant surfaces
+   * flicker badly without mipmaps. magFilter stays NearestFilter either way,
+   * so pixels remain sharp up close.
+   */
   mipmaps?: boolean
 }
 
-// Anisotropy haengt am Renderer, den die Asset-Consumer nicht kennen. Game setzt
-// das Maximum einmal beim Start; 1 ist der neutrale Default (u. a. fuer Tests).
+/**
+ * Anisotropy depends on the renderer, which asset consumers do not know. Game
+ * sets the maximum once at startup; 1 is the neutral default (e.g. for tests).
+ */
 let maxAnisotropy: number = 1
 
+/**
+ * Sets the anisotropic filtering level used for mipmapped textures.
+ * @param value - The renderer's maximum anisotropy.
+ */
 export function setMaxAnisotropy(value: number): void {
   maxAnisotropy = value
 }
@@ -36,12 +47,12 @@ function loadBaseTexture(
         if (mipmaps) {
           tex.minFilter = THREE.NearestMipmapLinearFilter
           tex.generateMipmaps = true
-          // Wichtig fuer Waende im flachen Blickwinkel (langer Korridor).
+          // Important for walls seen at a grazing angle (long corridors).
           tex.anisotropy = maxAnisotropy
         } else {
           tex.minFilter = THREE.NearestFilter
 
-          // 🔥 WICHTIG für Pixel-Art
+          // Important for pixel art: no mipmaps, no blurring.
           tex.generateMipmaps = false
         }
 
@@ -57,32 +68,45 @@ function loadBaseTexture(
   })
 }
 
+/**
+ * Loads a texture with pixel-art filtering and returns a cached clone.
+ *
+ * Every call returns its own clone, so callers may change offset/repeat freely
+ * and own (and must dispose) the returned texture.
+ *
+ * @param url - Path of the image.
+ * @param colorSpace - Color space the texture is tagged with.
+ * @param opts - See {@link PixelTextureOptions}.
+ * @returns A clone of the cached base texture.
+ */
 export function loadPixelTexture(
   url: string,
   colorSpace: THREE.ColorSpace = THREE.SRGBColorSpace,
   opts: PixelTextureOptions = {}
 ): Promise<THREE.Texture> {
   const mipmaps: boolean = opts.mipmaps ?? false
-  // colorSpace gehoert in den Key: derselbe Pfad kann bewusst unterschiedlich
-  // getaggt gebraucht werden, sonst gewinnt der erste Aufrufer.
-  // mipmaps ebenso - Klone teilen sich die source und damit den GPU-Upload, eine
-  // gemipmappte und eine ungemipmappte Variante wuerden sich gegenseitig
-  // ueberschreiben. Getrennte Keys = getrennte Base-Texturen.
+  // colorSpace belongs in the key: the same path may deliberately be needed with
+  // different tags, otherwise the first caller wins.
+  // So does mipmaps - clones share the source and thus the GPU upload, so a
+  // mipmapped and a non-mipmapped variant would overwrite each other.
+  // Separate keys = separate base textures.
   const key: string = `${url}|${colorSpace}|${mipmaps}`
   let base: Promise<THREE.Texture> | undefined = cache.get(key)
   if (!base) {
     base = loadBaseTexture(url, colorSpace, mipmaps)
     cache.set(key, base)
   }
-  // clone() teilt sich die Source -> ein GPU-Upload fuer alle Klone (three
-  // zaehlt die Referenzen pro Source), aber eigene offset/repeat pro Instanz.
-  // Kein needsUpdate hier: das wuerde source.version bumpen und die bereits
-  // hochgeladene Textur unnoetig neu uebertragen.
+  // clone() shares the source -> one GPU upload for all clones (three counts
+  // references per source), but each instance has its own offset/repeat.
+  // No needsUpdate here: it would bump source.version and re-upload the
+  // already uploaded texture for nothing.
   return base.then((tex: THREE.Texture) => tex.clone())
 }
 
-// Harter Reset des Caches (Tests / Level-Wechsel). Nicht in Game.dispose() aufrufen -
-// der Cache soll Retries ueberleben.
+/**
+ * Hard reset of the cache (tests / level changes). Do not call this from
+ * `Game.dispose()` - the cache is meant to survive retries.
+ */
 export function disposeTextureCache(): void {
   for (const pending of cache.values()) {
     pending.then((tex: THREE.Texture) => tex.dispose()).catch(() => {})
