@@ -27,6 +27,8 @@ export class EnemyAI {
     private readonly pathFinder = new AstarPathfinding();   
     private path: NavNode[] = [];
     private pathIndex = 0;
+    /** Nav node id of the player's cell the current path was planned to. */
+    private pathGoalId = -1;
     private replanTimer = Math.random() * this.replanInterval;
     //private seperationTimer = 0.5; // Random initial timer to avoid all enemies separating at the same time
 
@@ -147,14 +149,50 @@ export class EnemyAI {
 
     }
 
-    /** Places start and goal on the right level of the nav grid via their foot height, then runs A*. */
+    /**
+     * Places start and goal on the right level of the nav grid via their foot height, then runs A*.
+     *
+     * Against oscillation: while the enemy is on its way to a cell of the current path, it
+     * stays committed to that cell and the new path is planned from there. Planning from the
+     * cell the enemy currently stands in would let every replan pick a different first step
+     * (the enemy is still in the old cell half way to the next one), so it turned back and forth.
+     */
     private recomputePath(playerPos: THREE.Vector3, gameField: GameField): void {
         const nav: NavGrid = gameField.nav;
         const pos: THREE.Vector3 = this.enemy.position;
-        const start: NavNode | undefined = nav.nodeAt(pos.x, pos.y - this.enemy.baseHeight, pos.z);
+        const current: NavNode | undefined = nav.nodeAt(pos.x, pos.y - this.enemy.baseHeight, pos.z);
         const goal: NavNode | undefined = nav.nodeAt(playerPos.x, playerPos.y - PLAYER_EYE_HEIGHT, playerPos.z);
-        this.path = start && goal ? this.pathFinder.findPath(start, goal, nav) : [];
-        this.pathIndex = this.path.length > 1 ? 1 : 0;  // index 0 is the enemy's own cell
+        if (!current || !goal) {
+            this.path = [];
+            this.pathIndex = 0;
+            this.pathGoalId = -1;
+            return;
+        }
+
+        const committed: NavNode | undefined = this.committedNode(current, nav);
+
+        // Player still in the same cell and the path is still being followed -> nothing to do
+        if (committed && goal.id === this.pathGoalId) return;
+
+        if (committed) {
+            this.path = this.pathFinder.findPath(committed, goal, nav);
+            this.pathIndex = 0;      // walk to the committed cell first
+        } else {
+            this.path = this.pathFinder.findPath(current, goal, nav);
+            this.pathIndex = this.path.length > 1 ? 1 : 0;  // index 0 is the enemy's own cell
+        }
+        this.pathGoalId = goal.id;
+    }
+
+    /**
+     * The cell the enemy is currently walking to, if it is still a valid next step:
+     * the enemy stands in it or right next to it. A stale path (e.g. after strafing) returns undefined.
+     */
+    private committedNode(current: NavNode, nav: NavGrid): NavNode | undefined {
+        if (this.pathIndex >= this.path.length) return undefined;
+        const next: NavNode = this.path[this.pathIndex];
+        if (next.id === current.id) return next;
+        return nav.neighbors(current).some(e => e.node.id === next.id) ? next : undefined;
     }
 
     /** Walks towards the next node of the cached path. */

@@ -68,13 +68,24 @@ export class AstarPathfinding {
         return path;
     }
 
+    /**
+     * Heap order: lower fCost first; on a tie the node closer to the goal (higher gCost).
+     * Without a tie-break, equally cheap paths are picked depending on heap order, so
+     * two replans from neighbouring cells can choose different detours.
+     */
+    private isBetter(a: AstarNode, b: AstarNode): boolean {
+        const diff = a.fCost - b.fCost;
+        if (Math.abs(diff) > 1e-9) return diff < 0;
+        return a.gCost > b.gCost;
+    }
+
     /** Pushes a node onto the binary min-heap ordered by fCost. */
     private addToHeap(node: AstarNode): void {
         this.heap.push(node);
         let i = this.heap.length - 1;
         while (i > 0) {
             const parent = (i - 1) >> 1;
-            if (this.heap[i].fCost >= this.heap[parent].fCost) break;
+            if (!this.isBetter(this.heap[i], this.heap[parent])) break;
             [this.heap[i], this.heap[parent]] = [this.heap[parent], this.heap[i]];
             i = parent;
         }
@@ -92,8 +103,8 @@ export class AstarPathfinding {
                 let smallest = i;
                 const l = 2 * i + 1;
                 const r = 2 * i + 2;
-                if (l < n && this.heap[l].fCost < this.heap[smallest].fCost) smallest = l;
-                if (r < n && this.heap[r].fCost < this.heap[smallest].fCost) smallest = r;
+                if (l < n && this.isBetter(this.heap[l], this.heap[smallest])) smallest = l;
+                if (r < n && this.isBetter(this.heap[r], this.heap[smallest])) smallest = r;
                 if (smallest === i) break;
                 [this.heap[i], this.heap[smallest]] = [this.heap[smallest], this.heap[i]];
                 i = smallest;
