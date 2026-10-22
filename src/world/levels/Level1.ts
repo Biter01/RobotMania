@@ -23,6 +23,9 @@ export const LEVEL_1: LevelData = {
     { type: 'block', tile: 'brick', position: { x: 21, y: 1.5, z: 26.5 }, size: { x: 6, y: 3, z: 1 } },
     { type: 'block', tile: 'brick', position: { x: 23.5, y: 1.5, z: 28 }, size: { x: 1, y: 3, z: 2 } },
     { type: 'block', tile: 'brick', position: { x: 16, y: 1.5, z: 31.5 }, size: { x: 30, y: 3, z: 1 } },
+    { type: 'block', tile: 'brick', position: { x: 16, y: 3.5, z: 31.5 }, size: { x: 40, y: 0.5, z: 60 } },
+
+
     // Stairs
     { type: 'stair', dir: '>', position: { x: 18, y: 0, z: 14 }, tiles: 2 },
     { type: 'stair', dir: '>', position: { x: 18, y: 0, z: 15 }, tiles: 2 },

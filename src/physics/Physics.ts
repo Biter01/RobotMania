@@ -179,13 +179,21 @@ export class Physics {
         const footY: number = body.position.y - body.baseHeight
         const stair: StairData | undefined = world.getStairAt(x, z, footY)
         if (stair) {
+
+            if(this.checkWallCollision(world.colliders, body.position, Physics._probe.set(x, body.baseHeight + stair.baseY + stair.heightAt(x, z), z), body.getColliderBox())) {
+                return false
+            }
+
             body.position.y = body.baseHeight + stair.baseY + stair.heightAt(x, z) + STAIR_HEIGHT_OFFSET
             return true
         }
-
+        
         // Left in this frame: heightAt clamps to 0 or HEIGHT
         const prev: StairData | undefined = world.getStairAt(oldX, oldZ, footY)
         if (prev) {
+            if(this.checkWallCollision(world.colliders, body.position, Physics._probe.set(x, body.baseHeight + prev.baseY + prev.heightAt(x, z), z), body.getColliderBox())) {
+                return false
+            }
             body.position.y = body.baseHeight + prev.baseY + prev.heightAt(x, z)
         }
         return false

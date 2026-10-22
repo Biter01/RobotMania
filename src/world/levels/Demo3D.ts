@@ -17,9 +17,9 @@ export const DEMO_3D: LevelData = {
     // Platform A (top at y = 2)
     { type: 'block', tile: 'brick', position: { x: 12, y: 1, z: 4 }, size: { x: 6, y: 2, z: 6 } },
     // Stair from the floor (y = 0) up to platform A: 2 tiles rise by 2
-    { type: 'stair', dir: '>', position: { x: 7, y: 0, z: 3 }, tiles: 2 },
+    { type: 'stair', dir: '>' ,position: { x: 7, y: 0, z: 3 }, tiles: 2 },
     // Bridge from platform A to platform B (top at y = 2, 1.7 clear below)
-    { type: 'block', tile: 'floor', position: { x: 12, y: 1.85, z: 10 }, size: { x: 2, y: 0.3, z: 6 } },
+    { type: 'block', tile: 'brick', position: { x: 12, y: 1.85, z: 10 }, size: { x: 2, y: 0.3, z: 6 } },
     // Platform B (top at y = 2)
     { type: 'block', tile: 'brick', position: { x: 12, y: 1, z: 14 }, size: { x: 6, y: 2, z: 2 } },
     // Spawns

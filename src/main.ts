@@ -9,7 +9,7 @@ import { UIRenderer } from './ui/UIRenderer'
 
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement
 
-import { LEVEL_1 } from "./world/levels/Level1"
+import { DEMO_3D} from "./world/levels/Demo3D";
 
 /**
  * Exactly ONE WebGL context for the whole session. `renderer.dispose()` does not
@@ -19,7 +19,7 @@ const renderer: THREE.WebGLRenderer = new THREE.WebGLRenderer({ canvas, antialia
 renderer.setPixelRatio(window.devicePixelRatio)
 renderer.setSize(window.innerWidth, window.innerHeight)
 
-let currLevel = LEVEL_1
+let currLevel = DEMO_3D
 
 let game: Game = new Game(canvas, renderer)
 

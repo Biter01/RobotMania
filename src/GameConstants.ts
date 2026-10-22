@@ -33,12 +33,12 @@ export const STAIR_SIDE_THICKNESS = 0.005
  * Extra height on stairs so entities do not get stuck in the step blocks
  * (the walking ramp lies below the step edges).
  */
-export const STAIR_HEIGHT_OFFSET  = 0.25
+export const STAIR_HEIGHT_OFFSET  = 0.35
 
 // Gravity
 
 /** Downward acceleration in units/s². */
-export const GRAVITY              = 20
+export const GRAVITY              = 30
 /** Maximum falling speed in units/s. */
 export const MAX_FALL_SPEED       = 30
 /** Gap a body keeps to a collider when landing, to absorb float rounding. */
@@ -47,9 +47,9 @@ export const COLLISION_EPSILON    = 1e-6
 // Lighting
 
 /** Intensity of the ambient light. */
-export const AMBIENT_INTENSITY   = 0.4
+export const AMBIENT_INTENSITY   = 1
 /** Intensity of the directional light. */
-export const DIR_LIGHT_INTENSITY = 0.8
+export const DIR_LIGHT_INTENSITY = 1
 
 // Camera / renderer
 
